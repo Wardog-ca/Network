@@ -1,4 +1,3 @@
-
 # Version simplifiée de l'application
 import os
 import platform
@@ -81,27 +80,54 @@ def set_ip():
     var_iface = tk.StringVar(value=interfaces[0] if interfaces else "")
     tk.OptionMenu(win, var_iface, *interfaces).pack(pady=5)
 
+    # Option pour mode manuel ou DHCP
+    mode_var = tk.StringVar(value="manuel")
+    tk.Label(win, text="Mode d'attribution IP :").pack(pady=5)
+    tk.Radiobutton(win, text="Manuel", variable=mode_var, value="manuel").pack(anchor='w')
+    tk.Radiobutton(win, text="DHCP", variable=mode_var, value="dhcp").pack(anchor='w')
+
+    # Champ pour IP manuelle
+    ip_entry = tk.Entry(win)
+    ip_entry.pack(pady=5)
+    ip_entry.insert(0, DEVICE_IPS[list(DEVICE_IPS.keys())[0]])
+    def update_ip_entry(*_):
+        ip_entry.delete(0, tk.END)
+        ip_entry.insert(0, DEVICE_IPS[var_device.get()])
+    var_device.trace("w", update_ip_entry)
+
     def apply_ip():
         device = var_device.get()
-        ip = DEVICE_IPS[device]
         iface = var_iface.get().strip()
+        mode = mode_var.get()
+        ip = ip_entry.get().strip()
+        system = platform.system()
+        cmd = None
         if not iface:
             log("Interface réseau non spécifiée.")
             return
-        system = platform.system()
-        cmd = None
-        if system == "Windows":
-            cmd = f'netsh interface ip set address name="{iface}" static {ip} 255.255.255.0 192.168.1.1'
-        elif system == "Linux":
-            cmd = f"sudo ip addr flush dev {iface} && sudo ip addr add {ip}/24 dev {iface} && sudo ip route add default via 192.168.1.1"
-        elif system == "Darwin":
-            cmd = f"sudo networksetup -setmanual {iface} {ip} 255.255.255.0 192.168.1.1"
+        if mode == "dhcp":
+            if system == "Windows":
+                cmd = f'netsh interface ip set address name="{iface}" source=dhcp'
+            elif system == "Linux":
+                cmd = f"sudo dhclient {iface}"
+            elif system == "Darwin":
+                cmd = f"sudo ipconfig set {iface} DHCP"
+        else:
+            if not ip:
+                log("Adresse IP manuelle non spécifiée.")
+                return
+            if system == "Windows":
+                cmd = f'netsh interface ip set address name="{iface}" static {ip} 255.255.255.0 192.168.1.1'
+            elif system == "Linux":
+                cmd = f"sudo ip addr flush dev {iface} && sudo ip addr add {ip}/24 dev {iface} && sudo ip route add default via 192.168.1.1"
+            elif system == "Darwin":
+                cmd = f"sudo networksetup -setmanual {iface} {ip} 255.255.255.0 192.168.1.1"
         if cmd:
             result = os.system(cmd)
             if result == 0:
-                log(f"IP changée : {ip} sur interface {iface}")
+                log(f"Configuration appliquée ({mode}) sur {iface}")
             else:
-                log(f"Erreur lors de l'exécution de la commande pour l'interface '{iface}'. Vérifiez le nom et les droits administrateur.")
+                log(f"Erreur lors de l'exécution de la commande pour l'interface '{iface}'.")
         else:
             log("Système non supporté.")
         win.destroy()
