@@ -1,13 +1,19 @@
-import tkinter as tk
-from tkinter import scrolledtext
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QPushButton
+import sys
 
-root = tk.Tk()
-root.geometry("700x500")
+app = QApplication(sys.argv)
+window = QWidget()
+layout = QVBoxLayout()
 
-log_text = scrolledtext.ScrolledText(root)
-log_text.pack(fill=tk.BOTH, expand=True)
+log_text = QTextEdit()
+log_text.setReadOnly(True)
+layout.addWidget(log_text)
 
-log_text.insert(tk.END, "Tkinter fonctionne !\n")
-tk.Button(root, text="Test bouton").pack()
+button = QPushButton("Test")
+button.clicked.connect(lambda: log_text.append("Bouton cliqué !"))
+layout.addWidget(button)
 
-root.mainloop()
+window.setLayout(layout)
+window.resize(700, 500)
+window.show()
+sys.exit(app.exec())
