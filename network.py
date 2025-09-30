@@ -412,87 +412,290 @@ def get_network_interfaces():
     return interfaces
 
 def show_network_dashboard():
-    """Affiche le dashboard des interfaces réseau"""
+    """Affiche le dashboard des interfaces réseau avec interface graphique moderne"""
     dashboard_win = tk.Toplevel(root)
-    dashboard_win.title(tr("Dashboard Réseau", "Network Dashboard"))
-    dashboard_win.geometry("600x350")
+    dashboard_win.title(tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"))
+    dashboard_win.geometry("750x500")
+    dashboard_win.configure(bg='#f0f0f0')
     
-    # Frame pour les boutons
-    button_frame = tk.Frame(dashboard_win)
-    button_frame.pack(pady=10)
+    # Garder la fenêtre toujours au premier plan
+    dashboard_win.attributes('-topmost', True)
     
-    # Bouton actualiser
-    refresh_btn = tk.Button(button_frame, text=tr("Actualiser", "Refresh"), 
+    # Positionner le dashboard dans le coin supérieur droit
+    screen_width = dashboard_win.winfo_screenwidth()
+    dashboard_win.geometry("750x500+{}+50".format(screen_width - 800))
+    
+    # Permettre le redimensionnement mais avec taille minimum
+    dashboard_win.minsize(600, 400)
+    
+    # Icône de la fenêtre (si disponible)
+    try:
+        dashboard_win.iconname("Network Dashboard")
+    except:
+        pass
+    
+    # Style et couleurs
+    colors = {
+        'bg_main': '#f0f0f0',
+        'bg_header': '#2c3e50',
+        'bg_card': '#ffffff',
+        'text_header': '#ffffff',
+        'text_primary': '#2c3e50',
+        'text_secondary': '#7f8c8d',
+        'success': '#27ae60',
+        'danger': '#e74c3c',
+        'warning': '#f39c12',
+        'info': '#3498db'
+    }
+    
+    # En-tête avec titre et boutons
+    header_frame = tk.Frame(dashboard_win, bg=colors['bg_header'], height=60)
+    header_frame.pack(fill=tk.X, padx=0, pady=0)
+    header_frame.pack_propagate(False)
+    
+    # Titre principal
+    title_label = tk.Label(header_frame, text=tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"),
+                          font=("Arial", 16, "bold"), fg=colors['text_header'], bg=colors['bg_header'])
+    title_label.pack(side=tk.LEFT, padx=20, pady=15)
+    
+    # Boutons dans l'en-tête
+    buttons_frame = tk.Frame(header_frame, bg=colors['bg_header'])
+    buttons_frame.pack(side=tk.RIGHT, padx=20, pady=10)
+    
+    # Variable pour contrôler "always on top"
+    topmost_enabled = tk.BooleanVar(value=True)
+    
+    def toggle_topmost():
+        """Active/Désactive le mode 'toujours au premier plan'"""
+        dashboard_win.attributes('-topmost', topmost_enabled.get())
+        pin_btn.config(text="📌 " + tr("Épinglé", "Pinned") if topmost_enabled.get() 
+                      else "📍 " + tr("Épingler", "Pin"))
+    
+    # Bouton pour épingler/désépingler
+    pin_btn = tk.Button(buttons_frame, text="📌 " + tr("Épinglé", "Pinned"),
+                       font=("Arial", 10, "bold"), bg=colors['warning'], fg='white',
+                       relief='flat', padx=15, pady=5,
+                       command=lambda: [topmost_enabled.set(not topmost_enabled.get()), toggle_topmost()])
+    pin_btn.pack(side=tk.RIGHT, padx=5)
+    
+    refresh_btn = tk.Button(buttons_frame, text="🔄 " + tr("Actualiser", "Refresh"),
+                           font=("Arial", 10, "bold"), bg=colors['info'], fg='white',
+                           relief='flat', padx=15, pady=5,
                            command=lambda: refresh_interfaces())
-    refresh_btn.pack(side=tk.LEFT, padx=5)
+    refresh_btn.pack(side=tk.RIGHT, padx=5)
     
-    # Frame pour le tableau avec scrollbar
-    table_frame = tk.Frame(dashboard_win)
-    table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    # Frame principal avec scroll
+    main_frame = tk.Frame(dashboard_win, bg=colors['bg_main'])
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     
-    # Scrollbar
-    scrollbar = tk.Scrollbar(table_frame)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    # Canvas et scrollbar pour le contenu
+    canvas = tk.Canvas(main_frame, bg=colors['bg_main'], highlightthickness=0)
+    scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas, bg=colors['bg_main'])
     
-    # Text widget pour afficher le tableau (police plus petite)
-    table_text = tk.Text(table_frame, yscrollcommand=scrollbar.set, 
-                        font=("Courier", 9), state='disabled', height=12)
-    table_text.pack(fill=tk.BOTH, expand=True)
-    scrollbar.config(command=table_text.yview)
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
     
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
+    # Variables pour stocker les widgets
+    interface_frames = []
+    
+    def create_interface_card(parent, iface_name, iface_data):
+        """Crée une carte visuelle pour une interface réseau"""
+        # Frame principal de la carte
+        card_frame = tk.Frame(parent, bg=colors['bg_card'], relief='raised', bd=1)
+        card_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # En-tête de la carte avec nom et statut
+        header_frame = tk.Frame(card_frame, bg=colors['bg_card'])
+        header_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
+        
+        # Icône et nom d'interface avec icône spécifique
+        status_color = colors['success'] if iface_data['status'] == 'UP' else colors['danger']
+        
+        # Choisir l'icône selon le type d'interface
+        if 'wlan' in iface_name.lower() or 'wifi' in iface_name.lower() or 'wl' in iface_name.lower():
+            type_icon = "📶"  # WiFi
+        elif 'eth' in iface_name.lower() or 'enp' in iface_name.lower() or 'ens' in iface_name.lower():
+            type_icon = "🔌"  # Ethernet
+        elif 'ppp' in iface_name.lower() or 'tun' in iface_name.lower() or 'vpn' in iface_name.lower():
+            type_icon = "🔒"  # VPN/Tunnel
+        elif 'docker' in iface_name.lower() or 'br-' in iface_name.lower():
+            type_icon = "🐳"  # Docker/Bridge
+        else:
+            type_icon = "🌐"  # Interface générique
+        
+        status_icon = "🟢" if iface_data['status'] == 'UP' else "🔴"
+        
+        iface_label = tk.Label(header_frame, 
+                              text=f"{type_icon} {iface_name} {status_icon}",
+                              font=("Arial", 12, "bold"), 
+                              fg=colors['text_primary'], 
+                              bg=colors['bg_card'])
+        iface_label.pack(side=tk.LEFT)
+        
+        # Badge de statut
+        status_frame = tk.Frame(header_frame, bg=status_color, padx=8, pady=2)
+        status_frame.pack(side=tk.RIGHT)
+        status_label = tk.Label(status_frame, 
+                               text=iface_data['status'],
+                               font=("Arial", 9, "bold"), 
+                               fg='white', 
+                               bg=status_color)
+        status_label.pack()
+        
+        # Contenu de la carte
+        content_frame = tk.Frame(card_frame, bg=colors['bg_card'])
+        content_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+        
+        # Section IPv4
+        if iface_data['ipv4']:
+            ipv4_frame = tk.Frame(content_frame, bg=colors['bg_card'])
+            ipv4_frame.pack(fill=tk.X, pady=2)
+            
+            ipv4_icon = tk.Label(ipv4_frame, text="🌐", font=("Arial", 10), 
+                                bg=colors['bg_card'])
+            ipv4_icon.pack(side=tk.LEFT, padx=(0, 5))
+            
+            ipv4_label = tk.Label(ipv4_frame, text="IPv4:", 
+                                 font=("Arial", 10, "bold"), 
+                                 fg=colors['text_primary'], 
+                                 bg=colors['bg_card'])
+            ipv4_label.pack(side=tk.LEFT)
+            
+            for i, ip in enumerate(iface_data['ipv4']):
+                ip_label = tk.Label(ipv4_frame, text=ip, 
+                                   font=("Arial", 10), 
+                                   fg=colors['info'], 
+                                   bg=colors['bg_card'])
+                ip_label.pack(side=tk.LEFT, padx=(10 if i == 0 else 5, 0))
+        
+        # Section IPv6 (si présente)
+        if iface_data['ipv6']:
+            ipv6_frame = tk.Frame(content_frame, bg=colors['bg_card'])
+            ipv6_frame.pack(fill=tk.X, pady=2)
+            
+            ipv6_icon = tk.Label(ipv6_frame, text="🌍", font=("Arial", 10), 
+                                bg=colors['bg_card'])
+            ipv6_icon.pack(side=tk.LEFT, padx=(0, 5))
+            
+            ipv6_label = tk.Label(ipv6_frame, text="IPv6:", 
+                                 font=("Arial", 10, "bold"), 
+                                 fg=colors['text_primary'], 
+                                 bg=colors['bg_card'])
+            ipv6_label.pack(side=tk.LEFT)
+            
+            # Afficher seulement la première IPv6 (tronquée)
+            first_ipv6 = iface_data['ipv6'][0][:30] + "..." if len(iface_data['ipv6'][0]) > 30 else iface_data['ipv6'][0]
+            ip_label = tk.Label(ipv6_frame, text=first_ipv6, 
+                               font=("Arial", 9), 
+                               fg=colors['text_secondary'], 
+                               bg=colors['bg_card'])
+            ip_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Si pas d'IP
+        if not iface_data['ipv4'] and not iface_data['ipv6']:
+            no_ip_frame = tk.Frame(content_frame, bg=colors['bg_card'])
+            no_ip_frame.pack(fill=tk.X, pady=2)
+            
+            no_ip_label = tk.Label(no_ip_frame, text="❌ " + tr("Aucune adresse IP", "No IP address"), 
+                                  font=("Arial", 10), 
+                                  fg=colors['text_secondary'], 
+                                  bg=colors['bg_card'])
+            no_ip_label.pack(side=tk.LEFT)
+        
+        return card_frame
+
     def refresh_interfaces():
-        """Actualise la liste des interfaces"""
+        """Actualise la liste des interfaces avec cartes graphiques"""
+        # Supprimer les anciennes cartes
+        for widget in scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Récupérer les interfaces
         interfaces = get_network_interfaces()
         
-        table_text.configure(state='normal')
-        table_text.delete(1.0, tk.END)
+        # En-tête avec statistiques
+        stats_frame = tk.Frame(scrollable_frame, bg=colors['bg_main'])
+        stats_frame.pack(fill=tk.X, padx=5, pady=(0, 10))
         
-        # En-tête du tableau (version compacte)
-        header = f"{'Interface':<15} {'St':<3} {'IPv4':<15} {'IPv6':<25}\n"
-        header += "=" * 60 + "\n"
-        table_text.insert(tk.END, header)
+        total_interfaces = len([k for k in interfaces.keys() if k not in ['lo', 'Loopback']])
+        active_interfaces = len([k for k, v in interfaces.items() if v['status'] == 'UP' and k not in ['lo', 'Loopback']])
         
-        # Données des interfaces
-        for iface, data in interfaces.items():
-            if iface == 'lo' or iface == 'Loopback':  # Ignorer loopback sauf si demandé
+        # Statistiques en cartes
+        stats_card = tk.Frame(stats_frame, bg=colors['bg_card'], relief='raised', bd=1)
+        stats_card.pack(fill=tk.X, padx=5, pady=5)
+        
+        stats_content = tk.Frame(stats_card, bg=colors['bg_card'])
+        stats_content.pack(fill=tk.X, padx=15, pady=10)
+        
+        # Total interfaces
+        total_frame = tk.Frame(stats_content, bg=colors['info'], padx=10, pady=5)
+        total_frame.pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Label(total_frame, text=str(total_interfaces), 
+                font=("Arial", 16, "bold"), fg='white', bg=colors['info']).pack()
+        tk.Label(total_frame, text=tr("Interfaces", "Interfaces"), 
+                font=("Arial", 8), fg='white', bg=colors['info']).pack()
+        
+        # Interfaces actives
+        active_frame = tk.Frame(stats_content, bg=colors['success'], padx=10, pady=5)
+        active_frame.pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Label(active_frame, text=str(active_interfaces), 
+                font=("Arial", 16, "bold"), fg='white', bg=colors['success']).pack()
+        tk.Label(active_frame, text=tr("Actives", "Active"), 
+                font=("Arial", 8), fg='white', bg=colors['success']).pack()
+        
+        # Timestamp
+        time_label = tk.Label(stats_content, 
+                             text=tr("Actualisé: ", "Updated: ") + time.strftime('%H:%M:%S'),
+                             font=("Arial", 10), 
+                             fg=colors['text_secondary'], 
+                             bg=colors['bg_card'])
+        time_label.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Créer les cartes d'interfaces
+        for iface_name, iface_data in interfaces.items():
+            if iface_name in ['lo', 'Loopback']:  # Ignorer loopback
                 continue
-                
-            status = "UP" if data['status'] == 'UP' else "DN"  # Status abrégé
-            ipv4_list = data['ipv4'] if data['ipv4'] else [tr('---', '---')]
-            ipv6_list = data['ipv6'] if data['ipv6'] else []  # Ignorer IPv6 vide pour compacité
-            
-            # Première ligne avec le nom de l'interface
-            first_ipv4 = ipv4_list[0] if ipv4_list else tr('---', '---')
-            first_ipv6 = ipv6_list[0][:25] if ipv6_list else ''  # Tronquer IPv6
-            
-            # Tronquer le nom d'interface si trop long
-            iface_short = iface[:14] if len(iface) > 14 else iface
-            
-            line = f"{iface_short:<15} {status:<3} {first_ipv4:<15} {first_ipv6:<25}\n"
-            table_text.insert(tk.END, line)
-            
-            # Lignes supplémentaires seulement pour les IPv4 multiples (ignorer IPv6 pour compacité)
-            for i in range(1, len(ipv4_list)):
-                ipv4 = ipv4_list[i]
-                line = f"{'':<15} {'':<3} {ipv4:<15} {'':<25}\n"
-                table_text.insert(tk.END, line)
-        
-        # Informations supplémentaires (version compacte)
-        table_text.insert(tk.END, "\n" + "=" * 60 + "\n")
-        table_text.insert(tk.END, tr("Actualisé: ", "Updated: ") + 
-                         time.strftime('%H:%M:%S') + "\n")
-        
-        table_text.configure(state='disabled')
+            create_interface_card(scrollable_frame, iface_name, iface_data)
     
     # Actualisation initiale
     refresh_interfaces()
     
     # Auto-actualisation toutes les 30 secondes
     def auto_refresh():
-        refresh_interfaces()
-        dashboard_win.after(30000, auto_refresh)  # 30 secondes
+        try:
+            refresh_interfaces()
+            dashboard_win.after(30000, auto_refresh)  # 30 secondes
+        except:
+            pass  # Fenêtre fermée
     
     dashboard_win.after(30000, auto_refresh)
+    
+    # Bind mousewheel pour le scroll
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    # Bind scroll events
+    canvas.bind("<MouseWheel>", on_mousewheel)  # Windows
+    canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux
+    canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux
+    
+    # Focus sur la fenêtre pour les événements clavier
+    dashboard_win.focus_set()
+    
+    # Bind clavier pour actualisation (F5)
+    dashboard_win.bind("<F5>", lambda e: refresh_interfaces())
+    dashboard_win.bind("<Control-r>", lambda e: refresh_interfaces())
 
 def set_ip():
     messagebox.showinfo(tr("IP", "IP"), tr("Fenêtre de configuration IP manuelle ouverte.", "Manual IP configuration window opened."))
@@ -1077,6 +1280,9 @@ root = tk.Tk()
 root.title("Network Team - Simple")
 root.geometry("600x400")
 
+# Positionner la fenêtre principale à gauche pour laisser la place au dashboard
+root.geometry("600x400+50+50")
+
 log_text = tk.Text(root, height=15, state='disabled')
 log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -1192,5 +1398,14 @@ log(tr("✅ Network Team Application démarrée", "✅ Network Team Application 
 
 # --- Lancer la synchronisation automatique ---
 threading.Thread(target=auto_sync, daemon=True).start()
+
+# --- Ouvrir automatiquement le dashboard après un court délai ---
+def open_dashboard_auto():
+    """Ouvre automatiquement le dashboard au démarrage"""
+    log(tr("🌐 Ouverture automatique du dashboard réseau...", "🌐 Automatically opening network dashboard..."))
+    show_network_dashboard()
+
+# Délai de 1 seconde pour permettre à la fenêtre principale de se charger
+root.after(1000, open_dashboard_auto)
 
 root.mainloop()
