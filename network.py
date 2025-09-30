@@ -95,6 +95,194 @@ def delete_file():
         else:
             log(tr("Fichier ou dossier introuvable.", "File or folder not found."))
 
+def get_network_interfaces():
+    """Récupère toutes les interfaces réseau et leurs adresses IP"""
+    import subprocess
+    system = platform.system()
+    interfaces = {}
+    
+    try:
+        if system == "Linux":
+            # Linux - utiliser ip addr show
+            output = subprocess.check_output(["ip", "addr", "show"], encoding="utf-8")
+            current_interface = None
+            
+            for line in output.splitlines():
+                line = line.strip()
+                if line and line[0].isdigit():
+                    # Nouvelle interface
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        current_interface = parts[1].strip()
+                        interfaces[current_interface] = {
+                            'ipv4': [],
+                            'ipv6': [],
+                            'status': 'DOWN'
+                        }
+                        if 'UP' in line:
+                            interfaces[current_interface]['status'] = 'UP'
+                elif current_interface and 'inet ' in line:
+                    # Adresse IPv4
+                    parts = line.split()
+                    for i, part in enumerate(parts):
+                        if part == 'inet' and i + 1 < len(parts):
+                            ip = parts[i + 1].split('/')[0]
+                            interfaces[current_interface]['ipv4'].append(ip)
+                elif current_interface and 'inet6' in line:
+                    # Adresse IPv6
+                    parts = line.split()
+                    for i, part in enumerate(parts):
+                        if part == 'inet6' and i + 1 < len(parts):
+                            ip = parts[i + 1].split('/')[0]
+                            if not ip.startswith('fe80'):  # Ignorer les adresses link-local
+                                interfaces[current_interface]['ipv6'].append(ip)
+                                
+        elif system == "Darwin":
+            # macOS - utiliser ifconfig
+            output = subprocess.check_output(["ifconfig"], encoding="utf-8")
+            current_interface = None
+            
+            for line in output.splitlines():
+                if line and not line.startswith('\t') and ':' in line:
+                    # Nouvelle interface
+                    current_interface = line.split(':')[0]
+                    interfaces[current_interface] = {
+                        'ipv4': [],
+                        'ipv6': [],
+                        'status': 'DOWN'
+                    }
+                    if 'UP' in line:
+                        interfaces[current_interface]['status'] = 'UP'
+                elif current_interface and '\tinet ' in line:
+                    # Adresse IPv4
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        interfaces[current_interface]['ipv4'].append(parts[1])
+                elif current_interface and '\tinet6 ' in line:
+                    # Adresse IPv6
+                    parts = line.strip().split()
+                    if len(parts) >= 2 and not parts[1].startswith('fe80'):
+                        interfaces[current_interface]['ipv6'].append(parts[1])
+                        
+        elif system == "Windows":
+            # Windows - utiliser ipconfig
+            output = subprocess.check_output(["ipconfig", "/all"], encoding="utf-8", shell=True)
+            current_interface = None
+            
+            for line in output.splitlines():
+                line = line.strip()
+                if 'adapter' in line.lower() and line.endswith(':'):
+                    # Nouvelle interface
+                    current_interface = line.replace(':', '').strip()
+                    interfaces[current_interface] = {
+                        'ipv4': [],
+                        'ipv6': [],
+                        'status': 'DOWN'
+                    }
+                elif current_interface and 'IPv4 Address' in line:
+                    # Adresse IPv4
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        ip = parts[1].strip().replace('(Preferred)', '')
+                        interfaces[current_interface]['ipv4'].append(ip)
+                        interfaces[current_interface]['status'] = 'UP'
+                elif current_interface and 'IPv6 Address' in line:
+                    # Adresse IPv6
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        ip = parts[1].strip().replace('(Preferred)', '')
+                        if not ip.startswith('fe80'):
+                            interfaces[current_interface]['ipv6'].append(ip)
+                            
+    except Exception as e:
+        log(tr("Erreur lors de la récupération des interfaces:", "Error retrieving interfaces:") + f" {str(e)}", level="ERROR")
+    
+    return interfaces
+
+def show_network_dashboard():
+    """Affiche le dashboard des interfaces réseau"""
+    dashboard_win = tk.Toplevel(root)
+    dashboard_win.title(tr("Dashboard Réseau", "Network Dashboard"))
+    dashboard_win.geometry("800x500")
+    
+    # Frame pour les boutons
+    button_frame = tk.Frame(dashboard_win)
+    button_frame.pack(pady=10)
+    
+    # Bouton actualiser
+    refresh_btn = tk.Button(button_frame, text=tr("Actualiser", "Refresh"), 
+                           command=lambda: refresh_interfaces())
+    refresh_btn.pack(side=tk.LEFT, padx=5)
+    
+    # Frame pour le tableau avec scrollbar
+    table_frame = tk.Frame(dashboard_win)
+    table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    # Scrollbar
+    scrollbar = tk.Scrollbar(table_frame)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    
+    # Text widget pour afficher le tableau
+    table_text = tk.Text(table_frame, yscrollcommand=scrollbar.set, 
+                        font=("Courier", 10), state='disabled')
+    table_text.pack(fill=tk.BOTH, expand=True)
+    scrollbar.config(command=table_text.yview)
+    
+    def refresh_interfaces():
+        """Actualise la liste des interfaces"""
+        interfaces = get_network_interfaces()
+        
+        table_text.configure(state='normal')
+        table_text.delete(1.0, tk.END)
+        
+        # En-tête du tableau
+        header = f"{'Interface':<20} {'Status':<8} {'IPv4':<15} {'IPv6':<40}\n"
+        header += "=" * 85 + "\n"
+        table_text.insert(tk.END, header)
+        
+        # Données des interfaces
+        for iface, data in interfaces.items():
+            if iface == 'lo' or iface == 'Loopback':  # Ignorer loopback sauf si demandé
+                continue
+                
+            status = data['status']
+            ipv4_list = data['ipv4'] if data['ipv4'] else [tr('Aucune', 'None')]
+            ipv6_list = data['ipv6'] if data['ipv6'] else [tr('Aucune', 'None')]
+            
+            # Première ligne avec le nom de l'interface
+            first_ipv4 = ipv4_list[0] if ipv4_list else tr('Aucune', 'None')
+            first_ipv6 = ipv6_list[0] if ipv6_list else tr('Aucune', 'None')
+            
+            line = f"{iface:<20} {status:<8} {first_ipv4:<15} {first_ipv6:<40}\n"
+            table_text.insert(tk.END, line)
+            
+            # Lignes supplémentaires pour les autres IPs
+            max_ips = max(len(ipv4_list), len(ipv6_list))
+            for i in range(1, max_ips):
+                ipv4 = ipv4_list[i] if i < len(ipv4_list) else ''
+                ipv6 = ipv6_list[i] if i < len(ipv6_list) else ''
+                line = f"{'':<20} {'':<8} {ipv4:<15} {ipv6:<40}\n"
+                table_text.insert(tk.END, line)
+            
+            table_text.insert(tk.END, "\n")
+        
+        # Informations supplémentaires
+        table_text.insert(tk.END, "\n" + "=" * 85 + "\n")
+        table_text.insert(tk.END, tr("Dernière actualisation: ", "Last refresh: ") + 
+                         time.strftime('%Y-%m-%d %H:%M:%S') + "\n")
+        
+        table_text.configure(state='disabled')
+    
+    # Actualisation initiale
+    refresh_interfaces()
+    
+    # Auto-actualisation toutes les 30 secondes
+    def auto_refresh():
+        refresh_interfaces()
+        dashboard_win.after(30000, auto_refresh)  # 30 secondes
+    
+    dashboard_win.after(30000, auto_refresh)
+
 def set_ip():
     messagebox.showinfo(tr("IP", "IP"), tr("Fenêtre de configuration IP manuelle ouverte.", "Manual IP configuration window opened."))
 
@@ -692,13 +880,15 @@ menubar.add_cascade(label="Langue / Language", menu=menu_lang)
 
 # Network/IP management menu
 menu_network = tk.Menu(menubar, tearoff=0)
+menu_network.add_command(label=tr("Dashboard Réseau", "Network Dashboard"), command=show_network_dashboard)
+menu_network.add_separator()
 for device in DEVICE_IPS:
     menu_network.add_command(
         label=f"{device} ({DEVICE_IPS[device]})",
         command=lambda dev=device: set_ip_device(dev)
     )
 menu_network.add_command(label=tr("Manuel", "Manual"), command=set_ip_manual)
-menubar.add_cascade(label=tr("Réseau", "Network / Réseau"), menu=menu_network)
+menubar.add_cascade(label=tr("Réseau", "Network"), menu=menu_network)
 
 # File management menu
 menu_file = tk.Menu(menubar, tearoff=0)
@@ -717,9 +907,10 @@ root.config(menu=menubar)
 
 def update_ui_language():
     # Mise à jour des sous-menus seulement
+    menu_network.entryconfig(0, label=tr("Dashboard Réseau", "Network Dashboard"))
     for i, device in enumerate(DEVICE_IPS):
-        menu_network.entryconfig(i, label=f"{device} ({DEVICE_IPS[device]})")
-    menu_network.entryconfig(len(DEVICE_IPS), label=tr("Manuel", "Manual"))
+        menu_network.entryconfig(i + 2, label=f"{device} ({DEVICE_IPS[device]})")  # +2 pour Dashboard et separator
+    menu_network.entryconfig(len(DEVICE_IPS) + 2, label=tr("Manuel", "Manual"))
     menu_file.entryconfig(0, label=tr("Afficher fichiers", "Show files"))
     menu_file.entryconfig(1, label=tr("Ajouter fichier", "Add file"))
     menu_file.entryconfig(2, label=tr("Supprimer fichier", "Delete file"))
