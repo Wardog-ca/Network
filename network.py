@@ -412,6 +412,7 @@ def get_network_interfaces():
     return interfaces
 
 def show_network_dashboard():
+<<<<<<< HEAD
     """Affiche le dashboard des interfaces réseau avec interface graphique moderne"""
     dashboard_win = tk.Toplevel(root)
     dashboard_win.title(tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"))
@@ -427,6 +428,21 @@ def show_network_dashboard():
     
     # Permettre le redimensionnement mais avec taille minimum
     dashboard_win.minsize(600, 400)
+=======
+    """Affiche le dashboard des interfaces réseau avec interface graphique moderne et compact"""
+    dashboard_win = tk.Toplevel(root)
+    dashboard_win.title(tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"))
+    
+    # Taille initiale plus petite, sera ajustée dynamiquement
+    dashboard_win.geometry("400x300")
+    dashboard_win.configure(bg='#f0f0f0')
+    
+    # Garder la fenêtre toujours au premier plan
+    dashboard_win.attributes('-topmost', True)
+    
+    # Permettre le redimensionnement avec taille minimum plus petite
+    dashboard_win.minsize(350, 250)
+>>>>>>> 380e560 (modified:   network.py)
     
     # Icône de la fenêtre (si disponible)
     try:
@@ -448,6 +464,7 @@ def show_network_dashboard():
         'info': '#3498db'
     }
     
+<<<<<<< HEAD
     # En-tête avec titre et boutons
     header_frame = tk.Frame(dashboard_win, bg=colors['bg_header'], height=60)
     header_frame.pack(fill=tk.X, padx=0, pady=0)
@@ -461,6 +478,21 @@ def show_network_dashboard():
     # Boutons dans l'en-tête
     buttons_frame = tk.Frame(header_frame, bg=colors['bg_header'])
     buttons_frame.pack(side=tk.RIGHT, padx=20, pady=10)
+=======
+    # En-tête compact avec titre et boutons
+    header_frame = tk.Frame(dashboard_win, bg=colors['bg_header'], height=40)
+    header_frame.pack(fill=tk.X, padx=0, pady=0)
+    header_frame.pack_propagate(False)
+    
+    # Titre principal plus compact
+    title_label = tk.Label(header_frame, text=tr("🌐 Réseau", "🌐 Network"),
+                          font=("Arial", 12, "bold"), fg=colors['text_header'], bg=colors['bg_header'])
+    title_label.pack(side=tk.LEFT, padx=10, pady=8)
+    
+    # Boutons dans l'en-tête plus compacts
+    buttons_frame = tk.Frame(header_frame, bg=colors['bg_header'])
+    buttons_frame.pack(side=tk.RIGHT, padx=10, pady=5)
+>>>>>>> 380e560 (modified:   network.py)
     
     # Variable pour contrôler "always on top"
     topmost_enabled = tk.BooleanVar(value=True)
@@ -468,6 +500,7 @@ def show_network_dashboard():
     def toggle_topmost():
         """Active/Désactive le mode 'toujours au premier plan'"""
         dashboard_win.attributes('-topmost', topmost_enabled.get())
+<<<<<<< HEAD
         pin_btn.config(text="📌 " + tr("Épinglé", "Pinned") if topmost_enabled.get() 
                       else "📍 " + tr("Épingler", "Pin"))
     
@@ -519,6 +552,48 @@ def show_network_dashboard():
         
         # Icône et nom d'interface avec icône spécifique
         status_color = colors['success'] if iface_data['status'] == 'UP' else colors['danger']
+=======
+        pin_btn.config(text="📌" if topmost_enabled.get() else "📍")
+    
+    # Boutons plus compacts
+    pin_btn = tk.Button(buttons_frame, text="📌",
+                       font=("Arial", 9, "bold"), bg=colors['warning'], fg='white',
+                       relief='flat', padx=8, pady=2,
+                       command=lambda: [topmost_enabled.set(not topmost_enabled.get()), toggle_topmost()])
+    pin_btn.pack(side=tk.RIGHT, padx=2)
+    
+    refresh_btn = tk.Button(buttons_frame, text="🔄",
+                           font=("Arial", 9, "bold"), bg=colors['info'], fg='white',
+                           relief='flat', padx=8, pady=2,
+                           command=lambda: refresh_interfaces())
+    refresh_btn.pack(side=tk.RIGHT, padx=2)
+    
+    # Canvas et scrollbar pour le contenu
+    canvas = tk.Canvas(main_frame, bg=colors['bg_main'], highlightthickness=0)
+    scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas, bg=colors['bg_main'])
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
+    def create_interface_card(parent, iface_name, iface_data):
+        """Crée une carte visuelle compacte pour une interface réseau"""
+        # Frame principal de la carte - plus compact
+        card_frame = tk.Frame(parent, bg=colors['bg_card'], relief='raised', bd=1)
+        card_frame.pack(fill=tk.X, padx=2, pady=2)
+        
+        # En-tête de la carte avec nom et statut - hauteur réduite
+        header_frame = tk.Frame(card_frame, bg=colors['bg_card'])
+        header_frame.pack(fill=tk.X, padx=8, pady=(5, 2))
+>>>>>>> 380e560 (modified:   network.py)
         
         # Choisir l'icône selon le type d'interface
         if 'wlan' in iface_name.lower() or 'wifi' in iface_name.lower() or 'wl' in iface_name.lower():
@@ -532,15 +607,28 @@ def show_network_dashboard():
         else:
             type_icon = "🌐"  # Interface générique
         
+<<<<<<< HEAD
         status_icon = "🟢" if iface_data['status'] == 'UP' else "🔴"
         
         iface_label = tk.Label(header_frame, 
                               text=f"{type_icon} {iface_name} {status_icon}",
                               font=("Arial", 12, "bold"), 
+=======
+        status_color = colors['success'] if iface_data['status'] == 'UP' else colors['danger']
+        status_icon = "●" if iface_data['status'] == 'UP' else "○"
+        
+        # Nom d'interface tronqué pour économiser l'espace
+        display_name = iface_name[:12] if len(iface_name) > 12 else iface_name
+        
+        iface_label = tk.Label(header_frame, 
+                              text=f"{type_icon} {display_name}",
+                              font=("Arial", 10, "bold"), 
+>>>>>>> 380e560 (modified:   network.py)
                               fg=colors['text_primary'], 
                               bg=colors['bg_card'])
         iface_label.pack(side=tk.LEFT)
         
+<<<<<<< HEAD
         # Badge de statut
         status_frame = tk.Frame(header_frame, bg=status_color, padx=8, pady=2)
         status_frame.pack(side=tk.RIGHT)
@@ -610,11 +698,45 @@ def show_network_dashboard():
                                   fg=colors['text_secondary'], 
                                   bg=colors['bg_card'])
             no_ip_label.pack(side=tk.LEFT)
+=======
+        # Badge de statut plus petit
+        status_label = tk.Label(header_frame, 
+                               text=status_icon,
+                               font=("Arial", 12, "bold"), 
+                               fg=status_color, 
+                               bg=colors['bg_card'])
+        status_label.pack(side=tk.RIGHT)
+        
+        # Contenu compact
+        if iface_data['ipv4']:
+            content_frame = tk.Frame(card_frame, bg=colors['bg_card'])
+            content_frame.pack(fill=tk.X, padx=8, pady=(0, 5))
+            
+            # Afficher seulement la première IPv4 pour économiser l'espace
+            first_ipv4 = iface_data['ipv4'][0]
+            ip_label = tk.Label(content_frame, text=first_ipv4, 
+                               font=("Arial", 9), 
+                               fg=colors['info'], 
+                               bg=colors['bg_card'])
+            ip_label.pack(side=tk.LEFT)
+            
+            # Indicateur s'il y a plusieurs IPs
+            if len(iface_data['ipv4']) > 1:
+                multi_label = tk.Label(content_frame, text=f"+{len(iface_data['ipv4'])-1}", 
+                                      font=("Arial", 8), 
+                                      fg=colors['text_secondary'], 
+                                      bg=colors['bg_card'])
+                multi_label.pack(side=tk.LEFT, padx=(5, 0))
+>>>>>>> 380e560 (modified:   network.py)
         
         return card_frame
 
     def refresh_interfaces():
+<<<<<<< HEAD
         """Actualise la liste des interfaces avec cartes graphiques"""
+=======
+        """Actualise la liste des interfaces avec cartes graphiques compactes"""
+>>>>>>> 380e560 (modified:   network.py)
         # Supprimer les anciennes cartes
         for widget in scrollable_frame.winfo_children():
             widget.destroy()
@@ -622,6 +744,7 @@ def show_network_dashboard():
         # Récupérer les interfaces
         interfaces = get_network_interfaces()
         
+<<<<<<< HEAD
         # En-tête avec statistiques
         stats_frame = tk.Frame(scrollable_frame, bg=colors['bg_main'])
         stats_frame.pack(fill=tk.X, padx=5, pady=(0, 10))
@@ -663,11 +786,64 @@ def show_network_dashboard():
         time_label.pack(side=tk.RIGHT, padx=(10, 0))
         
         # Créer les cartes d'interfaces
+=======
+        # En-tête compact avec statistiques essentielles
+        stats_frame = tk.Frame(scrollable_frame, bg=colors['bg_card'], relief='raised', bd=1)
+        stats_frame.pack(fill=tk.X, padx=2, pady=(0, 5))
+        
+        stats_content = tk.Frame(stats_frame, bg=colors['bg_card'])
+        stats_content.pack(fill=tk.X, padx=8, pady=5)
+        
+        total_interfaces = len([k for k in interfaces.keys() if k not in ['lo', 'Loopback']])
+        active_interfaces = len([k for k, v in interfaces.items() if v['status'] == 'UP' and k not in ['lo', 'Loopback']])
+        
+        # Statistiques en une ligne compacte
+        stats_text = f"{active_interfaces}/{total_interfaces} " + tr("actives", "active")
+        stats_label = tk.Label(stats_content, text=stats_text,
+                              font=("Arial", 10, "bold"), 
+                              fg=colors['success'], 
+                              bg=colors['bg_card'])
+        stats_label.pack(side=tk.LEFT)
+        
+        # Timestamp compact
+        time_label = tk.Label(stats_content, 
+                             text=time.strftime('%H:%M:%S'),
+                             font=("Arial", 9), 
+                             fg=colors['text_secondary'], 
+                             bg=colors['bg_card'])
+        time_label.pack(side=tk.RIGHT)
+        
+        # Créer les cartes d'interfaces compactes
+>>>>>>> 380e560 (modified:   network.py)
         for iface_name, iface_data in interfaces.items():
             if iface_name in ['lo', 'Loopback']:  # Ignorer loopback
                 continue
             create_interface_card(scrollable_frame, iface_name, iface_data)
+<<<<<<< HEAD
     
+=======
+        
+        # Ajuster la taille de la fenêtre selon le contenu
+        dashboard_win.update_idletasks()
+        
+        # Calculer la hauteur nécessaire
+        content_height = scrollable_frame.winfo_reqheight()
+        header_height = 40
+        padding = 20
+        
+        # Hauteur optimale (maximum 500px pour éviter débordement écran)
+        optimal_height = min(content_height + header_height + padding, 500)
+        
+        # Largeur optimale basée sur le contenu
+        optimal_width = min(max(350, scrollable_frame.winfo_reqwidth() + 50), 450)
+        
+        # Position dans le coin supérieur droit
+        screen_width = dashboard_win.winfo_screenwidth()
+        x_pos = screen_width - optimal_width - 50
+        
+        dashboard_win.geometry(f"{optimal_width}x{optimal_height}+{x_pos}+50")
+
+>>>>>>> 380e560 (modified:   network.py)
     # Actualisation initiale
     refresh_interfaces()
     
