@@ -462,14 +462,14 @@ for device in DEVICE_IPS:
         command=lambda dev=device: set_ip_device(dev)
     )
 menu_network.add_command(label=tr("Manuel", "Manual"), command=set_ip_manual)
-menubar.add_cascade(label=tr("Réseau", "Network"), menu=menu_network)
+menubar.add_cascade(label=tr("Réseau", "Network / Réseau"), menu=menu_network)
 
 # File management menu
 menu_file = tk.Menu(menubar, tearoff=0)
 menu_file.add_command(label=tr("Afficher fichiers", "Show files"), command=show_files)
 menu_file.add_command(label=tr("Ajouter fichier", "Add file"), command=add_file)
 menu_file.add_command(label=tr("Supprimer fichier", "Delete file"), command=delete_file)
-menubar.add_cascade(label=tr("Gestion fichiers", "File Management"), menu=menu_file)
+menubar.add_cascade(label=tr("Gestion fichiers", "File Management / Gestion fichiers"), menu=menu_file)
 
 # Sync & USB menu
 menu_sync = tk.Menu(menubar, tearoff=0)
