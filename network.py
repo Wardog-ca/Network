@@ -95,6 +95,191 @@ def delete_file():
         else:
             log(tr("Fichier ou dossier introuvable.", "File or folder not found."))
 
+def get_tools_from_folder():
+    """Récupère la liste des outils disponibles dans le dossier Tools"""
+    tools_path = LOCAL_PATH / "Tools"
+    tools = []
+    
+    if not tools_path.exists():
+        # Créer le dossier Tools s'il n'existe pas
+        tools_path.mkdir(exist_ok=True)
+        log(tr("Dossier Tools créé dans Network Team", "Tools folder created in Network Team"))
+        return tools
+    
+    try:
+        for item in tools_path.iterdir():
+            if item.is_file():
+                # Vérifier si c'est un fichier exécutable
+                file_ext = item.suffix.lower()
+                executable_extensions = ['.exe', '.bat', '.cmd', '.sh', '.py', '.jar', '.app']
+                
+                if file_ext in executable_extensions or item.stat().st_mode & 0o111:  # Vérifier les permissions d'exécution
+                    tools.append({
+                        'name': item.stem,  # Nom sans extension
+                        'path': str(item),
+                        'extension': file_ext,
+                        'full_name': item.name
+                    })
+                    
+    except Exception as e:
+        log(tr("Erreur lors de la lecture du dossier Tools:", "Error reading Tools folder:") + f" {str(e)}", level="ERROR")
+    
+    return tools
+
+def launch_tool(tool_info):
+    """Lance un outil spécifique"""
+    tool_path = tool_info['path']
+    tool_name = tool_info['name']
+    tool_ext = tool_info['extension']
+    
+    try:
+        log(tr("Lancement de l'outil:", "Launching tool:") + f" {tool_name}")
+        
+        system = platform.system()
+        
+        if system == "Windows":
+            if tool_ext in ['.exe', '.bat', '.cmd']:
+                os.system(f'start "" "{tool_path}"')
+            elif tool_ext == '.py':
+                os.system(f'start python "{tool_path}"')
+            elif tool_ext == '.jar':
+                os.system(f'start java -jar "{tool_path}"')
+            else:
+                os.system(f'start "" "{tool_path}"')
+                
+        elif system == "Darwin":  # macOS
+            if tool_ext == '.app':
+                os.system(f'open "{tool_path}"')
+            elif tool_ext == '.py':
+                os.system(f'python3 "{tool_path}" &')
+            elif tool_ext == '.jar':
+                os.system(f'java -jar "{tool_path}" &')
+            elif tool_ext == '.sh':
+                os.system(f'chmod +x "{tool_path}" && "{tool_path}" &')
+            else:
+                os.system(f'open "{tool_path}"')
+                
+        elif system == "Linux":
+            if tool_ext == '.py':
+                os.system(f'python3 "{tool_path}" &')
+            elif tool_ext == '.jar':
+                os.system(f'java -jar "{tool_path}" &')
+            elif tool_ext == '.sh':
+                os.system(f'chmod +x "{tool_path}" && "{tool_path}" &')
+            else:
+                # Essayer avec xdg-open
+                os.system(f'xdg-open "{tool_path}" &')
+        
+        log(tr("Outil lancé:", "Tool launched:") + f" {tool_name}")
+        
+    except Exception as e:
+        log(tr("Erreur lors du lancement de l'outil", "Error launching tool") + f" {tool_name}: {str(e)}", level="ERROR")
+
+def show_tools_manager():
+    """Affiche le gestionnaire d'outils"""
+    tools_win = tk.Toplevel(root)
+    tools_win.title(tr("Gestionnaire d'Outils", "Tools Manager"))
+    tools_win.geometry("600x400")
+    
+    # Frame pour les boutons
+    button_frame = tk.Frame(tools_win)
+    button_frame.pack(pady=10)
+    
+    # Bouton actualiser
+    refresh_btn = tk.Button(button_frame, text=tr("Actualiser", "Refresh"), 
+                           command=lambda: refresh_tools_list())
+    refresh_btn.pack(side=tk.LEFT, padx=5)
+    
+    # Bouton ouvrir dossier Tools
+    open_folder_btn = tk.Button(button_frame, text=tr("Ouvrir dossier Tools", "Open Tools folder"), 
+                               command=open_tools_folder)
+    open_folder_btn.pack(side=tk.LEFT, padx=5)
+    
+    # Frame pour la liste des outils
+    list_frame = tk.Frame(tools_win)
+    list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    # Listbox avec scrollbar
+    scrollbar = tk.Scrollbar(list_frame)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    
+    tools_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Arial", 10))
+    tools_listbox.pack(fill=tk.BOTH, expand=True)
+    scrollbar.config(command=tools_listbox.yview)
+    
+    # Stockage des informations des outils
+    tools_data = []
+    
+    def refresh_tools_list():
+        """Actualise la liste des outils"""
+        nonlocal tools_data
+        tools_data = get_tools_from_folder()
+        
+        tools_listbox.delete(0, tk.END)
+        
+        if not tools_data:
+            tools_listbox.insert(tk.END, tr("Aucun outil trouvé dans le dossier Tools", "No tools found in Tools folder"))
+            tools_listbox.insert(tk.END, tr("Placez vos outils (.exe, .py, .sh, .jar, etc.) dans:", "Place your tools (.exe, .py, .sh, .jar, etc.) in:"))
+            tools_listbox.insert(tk.END, f"  {LOCAL_PATH / 'Tools'}")
+        else:
+            for i, tool in enumerate(tools_data):
+                display_text = f"{tool['name']} ({tool['extension']})"
+                tools_listbox.insert(tk.END, display_text)
+    
+    def on_tool_double_click(event):
+        """Lance l'outil sélectionné lors d'un double-clic"""
+        selection = tools_listbox.curselection()
+        if selection and tools_data:
+            index = selection[0]
+            if index < len(tools_data):
+                launch_tool(tools_data[index])
+    
+    # Bind double-click event
+    tools_listbox.bind('<Double-1>', on_tool_double_click)
+    
+    # Bouton pour lancer l'outil sélectionné
+    launch_frame = tk.Frame(tools_win)
+    launch_frame.pack(pady=10)
+    
+    launch_btn = tk.Button(launch_frame, text=tr("Lancer l'outil sélectionné", "Launch selected tool"),
+                          command=lambda: launch_selected_tool())
+    launch_btn.pack()
+    
+    def launch_selected_tool():
+        """Lance l'outil actuellement sélectionné"""
+        selection = tools_listbox.curselection()
+        if selection and tools_data:
+            index = selection[0]
+            if index < len(tools_data):
+                launch_tool(tools_data[index])
+        else:
+            log(tr("Aucun outil sélectionné", "No tool selected"))
+    
+    # Actualisation initiale
+    refresh_tools_list()
+
+def open_tools_folder():
+    """Ouvre le dossier Tools dans l'explorateur de fichiers"""
+    tools_path = LOCAL_PATH / "Tools"
+    
+    # Créer le dossier s'il n'existe pas
+    if not tools_path.exists():
+        tools_path.mkdir(exist_ok=True)
+    
+    try:
+        system = platform.system()
+        if system == "Windows":
+            os.system(f'explorer "{tools_path}"')
+        elif system == "Darwin":  # macOS
+            os.system(f'open "{tools_path}"')
+        elif system == "Linux":
+            os.system(f'xdg-open "{tools_path}"')
+        
+        log(tr("Dossier Tools ouvert:", "Tools folder opened:") + f" {tools_path}")
+        
+    except Exception as e:
+        log(tr("Erreur lors de l'ouverture du dossier Tools:", "Error opening Tools folder:") + f" {str(e)}", level="ERROR")
+
 def get_network_interfaces():
     """Récupère toutes les interfaces réseau et leurs adresses IP"""
     import subprocess
@@ -897,6 +1082,48 @@ menu_file.add_command(label=tr("Ajouter fichier", "Add file"), command=add_file)
 menu_file.add_command(label=tr("Supprimer fichier", "Delete file"), command=delete_file)
 menubar.add_cascade(label=tr("Gestion fichiers", "File Management / Gestion fichiers"), menu=menu_file)
 
+# Tools menu
+menu_tools = tk.Menu(menubar, tearoff=0)
+menu_tools.add_command(label=tr("Gestionnaire d'Outils", "Tools Manager"), command=show_tools_manager)
+menu_tools.add_command(label=tr("Ouvrir dossier Tools", "Open Tools folder"), command=open_tools_folder)
+menu_tools.add_separator()
+
+# Ajouter dynamiquement les outils disponibles
+def populate_tools_menu():
+    """Remplit le menu outils avec les outils disponibles"""
+    # Supprimer les anciens outils du menu (après le séparateur)
+    try:
+        # Compter les éléments fixes (Gestionnaire, Ouvrir dossier, séparateur)
+        fixed_items = 3
+        menu_size = menu_tools.index(tk.END)
+        if menu_size is not None:
+            for i in range(menu_size, fixed_items - 1, -1):
+                try:
+                    menu_tools.delete(i)
+                except:
+                    break
+    except:
+        pass
+    
+    # Ajouter les outils disponibles
+    tools = get_tools_from_folder()
+    if tools:
+        for tool in tools[:10]:  # Limiter à 10 outils pour éviter un menu trop long
+            menu_tools.add_command(
+                label=f"{tool['name']} ({tool['extension']})",
+                command=lambda t=tool: launch_tool(t)
+            )
+    else:
+        menu_tools.add_command(
+            label=tr("Aucun outil disponible", "No tools available"),
+            state='disabled'
+        )
+
+# Peupler le menu outils au démarrage
+populate_tools_menu()
+
+menubar.add_cascade(label=tr("Outils", "Tools"), menu=menu_tools)
+
 # Sync & USB menu
 menu_sync = tk.Menu(menubar, tearoff=0)
 menu_sync.add_command(label=tr("Sync", "Sync"), command=manual_sync)
@@ -914,6 +1141,11 @@ def update_ui_language():
     menu_file.entryconfig(0, label=tr("Afficher fichiers", "Show files"))
     menu_file.entryconfig(1, label=tr("Ajouter fichier", "Add file"))
     menu_file.entryconfig(2, label=tr("Supprimer fichier", "Delete file"))
+    # Menu outils
+    menu_tools.entryconfig(0, label=tr("Gestionnaire d'Outils", "Tools Manager"))
+    menu_tools.entryconfig(1, label=tr("Ouvrir dossier Tools", "Open Tools folder"))
+    # Re-peupler le menu outils pour la traduction
+    populate_tools_menu()
     menu_sync.entryconfig(0, label=tr("Sync", "Sync"))
     menu_sync.entryconfig(1, label=tr("Ejecter USB", "Eject USB"))
     menu_lang.entryconfig(0, label="Français")
