@@ -426,19 +426,30 @@ def show_network_dashboard():
         x_pos = screen_width - 420
         dashboard_win.geometry(f"400x500+{x_pos}+50")
         
-        # En-tête
+        # Configurer la grille pour un contrôle total de la position
+        dashboard_win.grid_rowconfigure(1, weight=1)
+        dashboard_win.grid_columnconfigure(0, weight=1)
+        
+        # En-tête - ROW 0 (en haut)
         header_frame = tk.Frame(dashboard_win, bg='#2c3e50', height=50)
-        header_frame.pack(fill=tk.X)
-        header_frame.pack_propagate(False)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        header_frame.grid_propagate(False)
         
         title_label = tk.Label(header_frame, text="🌐 Réseau", 
                               font=("Arial", 14, "bold"), 
                               fg='white', bg='#2c3e50')
         title_label.pack(side=tk.LEFT, padx=15, pady=15)
         
-        # Frame principal
+        # Bouton refresh dans l'en-tête
+        refresh_btn = tk.Button(header_frame, text="🔄", 
+                               font=("Arial", 10), bg='#3498db', fg='white',
+                               relief='flat', padx=10, pady=5,
+                               command=lambda: refresh_interfaces())
+        refresh_btn.pack(side=tk.RIGHT, padx=15, pady=10)
+        
+        # Frame principal - ROW 1 (en bas, expansible)
         main_frame = tk.Frame(dashboard_win, bg='#f0f0f0')
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
         
         # Canvas avec scroll
         canvas = tk.Canvas(main_frame, bg='#f0f0f0', highlightthickness=0)
@@ -1405,10 +1416,7 @@ root.geometry("600x400")
 # Positionner la fenêtre principale à gauche pour laisser la place au dashboard
 root.geometry("600x400+50+50")
 
-log_text = tk.Text(root, height=15, state='disabled')
-log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-# Création des menus
+# Création des menus AVANT les autres widgets
 menubar = tk.Menu(root)
 
 # Language menu
@@ -1484,7 +1492,12 @@ menu_sync.add_command(label=tr("Sync", "Sync"), command=manual_sync)
 menu_sync.add_command(label=tr("Ejecter USB", "Eject USB"), command=eject_usb)
 menubar.add_cascade(label=tr("Synchronisation / USB", "Sync / USB"), menu=menu_sync)
 
+# Configurer le menu sur la fenêtre AVANT d'ajouter d'autres widgets
 root.config(menu=menubar)
+
+# Maintenant ajouter le widget de log
+log_text = tk.Text(root, height=15, state='disabled')
+log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 def update_ui_language():
     # Mise à jour des sous-menus seulement
