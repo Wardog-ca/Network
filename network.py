@@ -10,9 +10,36 @@ from pathlib import Path
 import logging
 
 SYNC_FOLDER = "Network Team"
-LOCAL_PATH = Path.home() / SYNC_FOLDER
-LOCAL_PATH.mkdir(parents=True, exist_ok=True)
 
+# Détecter si l'application est lancée depuis une clé USB
+def detect_usb_launch():
+    """Détecte si l'application est lancée depuis une clé USB"""
+    script_path = Path(__file__).parent.absolute()
+    
+    # Vérifier si le script est dans un dossier "Network Team" sur USB
+    if script_path.name == SYNC_FOLDER:
+        return script_path
+    
+    # Vérifier si on trouve un dossier "Network Team" parent
+    current = script_path
+    for _ in range(3):  # Chercher 3 niveaux au-dessus
+        parent_network_team = current / SYNC_FOLDER
+        if parent_network_team.exists():
+            return parent_network_team
+        current = current.parent
+    
+    return None
+
+# Déterminer le chemin de travail (USB ou local)
+USB_PATH = detect_usb_launch()
+if USB_PATH:
+    LOCAL_PATH = USB_PATH
+    log_location = "USB"
+else:
+    LOCAL_PATH = Path.home() / SYNC_FOLDER
+    log_location = "Local"
+
+LOCAL_PATH.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOCAL_PATH / "network_team.log"
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1152,6 +1179,16 @@ def update_ui_language():
 
 # Appel initial pour afficher la langue courante
 update_ui_language()
+
+# Message de démarrage indiquant la source de lancement
+if USB_PATH:
+    log(tr("🚀 Application lancée depuis USB:", "🚀 Application launched from USB:") + f" {USB_PATH}")
+    log(tr("📁 Dossier de travail:", "📁 Working folder:") + f" {LOCAL_PATH}")
+else:
+    log(tr("🏠 Application lancée en mode local", "🏠 Application launched in local mode"))
+    log(tr("📁 Dossier de travail:", "📁 Working folder:") + f" {LOCAL_PATH}")
+
+log(tr("✅ Network Team Application démarrée", "✅ Network Team Application started"))
 
 # --- Lancer la synchronisation automatique ---
 threading.Thread(target=auto_sync, daemon=True).start()
