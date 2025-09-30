@@ -388,7 +388,7 @@ def show_network_dashboard():
     """Affiche le dashboard des interfaces réseau"""
     dashboard_win = tk.Toplevel(root)
     dashboard_win.title(tr("Dashboard Réseau", "Network Dashboard"))
-    dashboard_win.geometry("800x500")
+    dashboard_win.geometry("600x350")
     
     # Frame pour les boutons
     button_frame = tk.Frame(dashboard_win)
@@ -401,15 +401,15 @@ def show_network_dashboard():
     
     # Frame pour le tableau avec scrollbar
     table_frame = tk.Frame(dashboard_win)
-    table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
     
     # Scrollbar
     scrollbar = tk.Scrollbar(table_frame)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     
-    # Text widget pour afficher le tableau
+    # Text widget pour afficher le tableau (police plus petite)
     table_text = tk.Text(table_frame, yscrollcommand=scrollbar.set, 
-                        font=("Courier", 10), state='disabled')
+                        font=("Courier", 9), state='disabled', height=12)
     table_text.pack(fill=tk.BOTH, expand=True)
     scrollbar.config(command=table_text.yview)
     
@@ -420,9 +420,9 @@ def show_network_dashboard():
         table_text.configure(state='normal')
         table_text.delete(1.0, tk.END)
         
-        # En-tête du tableau
-        header = f"{'Interface':<20} {'Status':<8} {'IPv4':<15} {'IPv6':<40}\n"
-        header += "=" * 85 + "\n"
+        # En-tête du tableau (version compacte)
+        header = f"{'Interface':<15} {'St':<3} {'IPv4':<15} {'IPv6':<25}\n"
+        header += "=" * 60 + "\n"
         table_text.insert(tk.END, header)
         
         # Données des interfaces
@@ -430,31 +430,30 @@ def show_network_dashboard():
             if iface == 'lo' or iface == 'Loopback':  # Ignorer loopback sauf si demandé
                 continue
                 
-            status = data['status']
-            ipv4_list = data['ipv4'] if data['ipv4'] else [tr('Aucune', 'None')]
-            ipv6_list = data['ipv6'] if data['ipv6'] else [tr('Aucune', 'None')]
+            status = "UP" if data['status'] == 'UP' else "DN"  # Status abrégé
+            ipv4_list = data['ipv4'] if data['ipv4'] else [tr('---', '---')]
+            ipv6_list = data['ipv6'] if data['ipv6'] else []  # Ignorer IPv6 vide pour compacité
             
             # Première ligne avec le nom de l'interface
-            first_ipv4 = ipv4_list[0] if ipv4_list else tr('Aucune', 'None')
-            first_ipv6 = ipv6_list[0] if ipv6_list else tr('Aucune', 'None')
+            first_ipv4 = ipv4_list[0] if ipv4_list else tr('---', '---')
+            first_ipv6 = ipv6_list[0][:25] if ipv6_list else ''  # Tronquer IPv6
             
-            line = f"{iface:<20} {status:<8} {first_ipv4:<15} {first_ipv6:<40}\n"
+            # Tronquer le nom d'interface si trop long
+            iface_short = iface[:14] if len(iface) > 14 else iface
+            
+            line = f"{iface_short:<15} {status:<3} {first_ipv4:<15} {first_ipv6:<25}\n"
             table_text.insert(tk.END, line)
             
-            # Lignes supplémentaires pour les autres IPs
-            max_ips = max(len(ipv4_list), len(ipv6_list))
-            for i in range(1, max_ips):
-                ipv4 = ipv4_list[i] if i < len(ipv4_list) else ''
-                ipv6 = ipv6_list[i] if i < len(ipv6_list) else ''
-                line = f"{'':<20} {'':<8} {ipv4:<15} {ipv6:<40}\n"
+            # Lignes supplémentaires seulement pour les IPv4 multiples (ignorer IPv6 pour compacité)
+            for i in range(1, len(ipv4_list)):
+                ipv4 = ipv4_list[i]
+                line = f"{'':<15} {'':<3} {ipv4:<15} {'':<25}\n"
                 table_text.insert(tk.END, line)
-            
-            table_text.insert(tk.END, "\n")
         
-        # Informations supplémentaires
-        table_text.insert(tk.END, "\n" + "=" * 85 + "\n")
-        table_text.insert(tk.END, tr("Dernière actualisation: ", "Last refresh: ") + 
-                         time.strftime('%Y-%m-%d %H:%M:%S') + "\n")
+        # Informations supplémentaires (version compacte)
+        table_text.insert(tk.END, "\n" + "=" * 60 + "\n")
+        table_text.insert(tk.END, tr("Actualisé: ", "Updated: ") + 
+                         time.strftime('%H:%M:%S') + "\n")
         
         table_text.configure(state='disabled')
     
