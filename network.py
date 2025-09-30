@@ -232,12 +232,99 @@ def set_ip_manual():
             # Configuration DHCP
             if system == "Windows":
                 cmd = f'netsh interface ip set address name="{iface}" dhcp'
+                result = os.system(cmd)
+                if result == 0:
+                    log(tr("Configuration DHCP appliquée sur", "DHCP configuration applied on") + f" {iface}")
+                else:
+                    log(tr("Erreur lors de l'application du DHCP sur l'interface", "Error applying DHCP on interface") + f" '{iface}'.")
             elif system == "Linux":
-                cmd = f"sudo dhclient {iface}"
+                # Détecter la distribution Linux pour optimiser l'approche
+                import subprocess
+                distro = ""
+                try:
+                    # Essayer de détecter la distribution
+                    if os.path.exists("/etc/redhat-release"):
+                        with open("/etc/redhat-release", "r") as f:
+                            distro = f.read().lower()
+                    elif os.path.exists("/etc/os-release"):
+                        with open("/etc/os-release", "r") as f:
+                            content = f.read().lower()
+                            if "ubuntu" in content or "debian" in content:
+                                distro = "ubuntu"
+                            elif "red hat" in content or "rhel" in content or "centos" in content:
+                                distro = "rhel"
+                except:
+                    distro = ""
+                
+                log(tr("Configuration DHCP en cours sur", "Configuring DHCP on") + f" {iface}...")
+                
+                # Approche optimisée selon la distribution
+                if "rhel" in distro or "red hat" in distro or "centos" in distro:
+                    # RHEL 8/9 - NetworkManager est le standard
+                    log(tr("Distribution RHEL détectée, utilisation de NetworkManager...", "RHEL distribution detected, using NetworkManager..."))
+                    
+                    # Méthode 1: nmcli (NetworkManager) - Standard RHEL 8
+                    nm_cmd = f"sudo nmcli con mod {iface} ipv4.method auto && sudo nmcli con down {iface} && sudo nmcli con up {iface}"
+                    result1 = os.system(nm_cmd)
+                    
+                    if result1 != 0:
+                        # Méthode 2: Créer une nouvelle connexion NetworkManager
+                        log(tr("Création d'une nouvelle connexion NetworkManager...", "Creating new NetworkManager connection..."))
+                        delete_cmd = f"sudo nmcli con delete {iface} 2>/dev/null || true"
+                        os.system(delete_cmd)
+                        create_cmd = f"sudo nmcli con add type ethernet con-name {iface} ifname {iface} && sudo nmcli con mod {iface} ipv4.method auto && sudo nmcli con up {iface}"
+                        result2 = os.system(create_cmd)
+                        
+                        if result2 == 0:
+                            log(tr("Configuration DHCP appliquée via NetworkManager (nouvelle connexion) sur", "DHCP configuration applied via NetworkManager (new connection) on") + f" {iface}")
+                        else:
+                            # Méthode 3: dhclient en dernier recours
+                            log(tr("Tentative avec dhclient...", "Trying with dhclient..."))
+                            release_cmd = f"sudo ip addr flush dev {iface}"
+                            os.system(release_cmd)
+                            dhcp_cmd = f"sudo dhclient -r {iface} 2>/dev/null || true && sudo dhclient {iface}"
+                            result3 = os.system(dhcp_cmd)
+                            
+                            if result3 == 0:
+                                log(tr("Configuration DHCP appliquée via dhclient sur", "DHCP configuration applied via dhclient on") + f" {iface}")
+                            else:
+                                log(tr("Erreur: Toutes les méthodes DHCP ont échoué sur", "Error: All DHCP methods failed on") + f" {iface}", level="ERROR")
+                    else:
+                        log(tr("Configuration DHCP appliquée via NetworkManager sur", "DHCP configuration applied via NetworkManager on") + f" {iface}")
+                        
+                else:
+                    # Ubuntu/Debian - Essayer Netplan d'abord
+                    log(tr("Distribution Ubuntu/Debian détectée...", "Ubuntu/Debian distribution detected..."))
+                    
+                    # Méthode 1: Netplan (Ubuntu moderne)
+                    netplan_cmd = f"sudo netplan set ethernets.{iface}.dhcp4=true && sudo netplan apply"
+                    result1 = os.system(netplan_cmd)
+                    
+                    if result1 != 0:
+                        # Méthode 2: NetworkManager
+                        log(tr("Tentative avec NetworkManager...", "Trying with NetworkManager..."))
+                        nm_cmd = f"sudo nmcli con mod {iface} ipv4.method auto && sudo nmcli con up {iface}"
+                        result2 = os.system(nm_cmd)
+                        
+                        if result2 != 0:
+                            # Méthode 3: dhclient classique
+                            log(tr("Tentative avec dhclient...", "Trying with dhclient..."))
+                            release_cmd = f"sudo ip addr flush dev {iface}"
+                            os.system(release_cmd)
+                            dhcp_cmd = f"sudo dhclient -r {iface} && sudo dhclient {iface}"
+                            result3 = os.system(dhcp_cmd)
+                            
+                            if result3 == 0:
+                                log(tr("Configuration DHCP appliquée via dhclient sur", "DHCP configuration applied via dhclient on") + f" {iface}")
+                            else:
+                                log(tr("Erreur: Toutes les méthodes DHCP ont échoué sur", "Error: All DHCP methods failed on") + f" {iface}", level="ERROR")
+                        else:
+                            log(tr("Configuration DHCP appliquée via NetworkManager sur", "DHCP configuration applied via NetworkManager on") + f" {iface}")
+                    else:
+                        log(tr("Configuration DHCP appliquée via Netplan sur", "DHCP configuration applied via Netplan on") + f" {iface}")
+                    
             elif system == "Darwin":
                 cmd = f"sudo networksetup -setdhcp {iface}"
-            
-            if cmd:
                 result = os.system(cmd)
                 if result == 0:
                     log(tr("Configuration DHCP appliquée sur", "DHCP configuration applied on") + f" {iface}")
