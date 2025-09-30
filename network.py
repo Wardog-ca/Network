@@ -311,29 +311,75 @@ def set_ip_manual():
                     if ubuntu_version and float(ubuntu_version.split('.')[0]) >= 25:
                         log(tr("Ubuntu 25.04+ détecté, priorité à NetworkManager...", "Ubuntu 25.04+ detected, NetworkManager priority..."))
                         
-                        # Méthode 1: NetworkManager (prioritaire pour Ubuntu 25.04+)
-                        # D'abord, s'assurer que l'interface est gérée par NetworkManager
-                        unmanaged_cmd = f"sudo nmcli dev set {iface} managed yes"
-                        os.system(unmanaged_cmd)
+                        # Méthode 1: systemd-networkd avec network-online (Ubuntu 25.04+ moderne)
+                        log(tr("Tentative avec systemd-networkd et network-online...", "Trying with systemd-networkd and network-online..."))
                         
-                        # Supprimer les connexions existantes qui pourraient causer des conflits
-                        cleanup_cmd = f"sudo nmcli con show | grep {iface} | awk '{{print $1}}' | xargs -r sudo nmcli con delete"
-                        os.system(cleanup_cmd)
+                        # Créer la configuration systemd-networkd
+                        networkd_config = f"""[Match]
+Name={iface}
+
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=ipv6
+
+[DHCP]
+RouteMetric=100
+UseMTU=true"""
                         
-                        # Créer une nouvelle connexion DHCP
-                        nm_cmd = f"sudo nmcli con add type ethernet con-name 'dhcp-{iface}' ifname {iface} && sudo nmcli con mod 'dhcp-{iface}' ipv4.method auto && sudo nmcli con up 'dhcp-{iface}'"
-                        result1 = os.system(nm_cmd)
+                        networkd_file = f"/tmp/25-{iface}.network"
+                        try:
+                            with open(networkd_file, "w") as f:
+                                f.write(networkd_config)
+                            
+                            # Appliquer la configuration systemd-networkd
+                            networkd_cmd = f"""sudo cp {networkd_file} /etc/systemd/network/ && 
+                                             sudo systemctl enable systemd-networkd && 
+                                             sudo systemctl restart systemd-networkd && 
+                                             sudo systemctl restart systemd-networkd-wait-online"""
+                            
+                            result1 = os.system(networkd_cmd.replace('\n', ''))
+                            os.remove(networkd_file)
+                            
+                            if result1 == 0:
+                                # Attendre que network-online soit actif
+                                wait_cmd = "sudo systemctl is-active --wait network-online.target"
+                                os.system(wait_cmd)
+                                log(tr("Configuration DHCP appliquée via systemd-networkd sur", "DHCP configuration applied via systemd-networkd on") + f" {iface}")
+                            
+                        except Exception as e:
+                            log(tr("Erreur systemd-networkd:", "systemd-networkd error:") + f" {str(e)}", level="ERROR")
+                            result1 = 1
                         
                         if result1 != 0:
-                            # Méthode 2: Netplan avec configuration explicite
-                            log(tr("Tentative avec Netplan (configuration fichier)...", "Trying with Netplan (file configuration)..."))
+                            # Méthode 2: NetworkManager (fallback)
+                            log(tr("Tentative avec NetworkManager...", "Trying with NetworkManager..."))
+                            
+                            # S'assurer que l'interface est gérée par NetworkManager
+                            unmanaged_cmd = f"sudo nmcli dev set {iface} managed yes"
+                            os.system(unmanaged_cmd)
+                            
+                            # Supprimer les connexions existantes qui pourraient causer des conflits
+                            cleanup_cmd = f"sudo nmcli con show | grep {iface} | awk '{{print $1}}' | xargs -r sudo nmcli con delete"
+                            os.system(cleanup_cmd)
+                            
+                            # Créer une nouvelle connexion DHCP
+                            nm_cmd = f"sudo nmcli con add type ethernet con-name 'dhcp-{iface}' ifname {iface} && sudo nmcli con mod 'dhcp-{iface}' ipv4.method auto && sudo nmcli con up 'dhcp-{iface}'"
+                            result1 = os.system(nm_cmd)
+                        
+                        if result1 != 0:
+                            # Méthode 3: Netplan avec network-online.target
+                            log(tr("Tentative avec Netplan et network-online.target...", "Trying with Netplan and network-online.target..."))
                             
                             netplan_config = f"""network:
   version: 2
+  renderer: networkd
   ethernets:
     {iface}:
       dhcp4: true
-      dhcp6: false"""
+      dhcp6: false
+      dhcp4-overrides:
+        use-routes: true
+        use-dns: true"""
                             
                             # Créer un fichier de configuration temporaire
                             config_file = f"/tmp/99-{iface}-dhcp.yaml"
@@ -341,9 +387,12 @@ def set_ip_manual():
                                 with open(config_file, "w") as f:
                                     f.write(netplan_config)
                                 
-                                # Copier la configuration et appliquer
-                                copy_cmd = f"sudo cp {config_file} /etc/netplan/ && sudo netplan apply"
-                                result2 = os.system(copy_cmd)
+                                # Copier la configuration et appliquer avec network-online
+                                copy_cmd = f"""sudo cp {config_file} /etc/netplan/ && 
+                                             sudo netplan apply && 
+                                             sudo systemctl restart systemd-networkd-wait-online && 
+                                             sudo systemctl --wait is-system-running"""
+                                result2 = os.system(copy_cmd.replace('\n', ''))
                                 os.remove(config_file)  # Nettoyer le fichier temporaire
                                 
                                 if result2 != 0:
