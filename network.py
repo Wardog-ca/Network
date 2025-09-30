@@ -293,35 +293,135 @@ def set_ip_manual():
                         log(tr("Configuration DHCP appliquée via NetworkManager sur", "DHCP configuration applied via NetworkManager on") + f" {iface}")
                         
                 else:
-                    # Ubuntu/Debian - Essayer Netplan d'abord
-                    log(tr("Distribution Ubuntu/Debian détectée...", "Ubuntu/Debian distribution detected..."))
+                    # Ubuntu/Debian - Détection de version pour Ubuntu 25.04+
+                    ubuntu_version = ""
+                    try:
+                        with open("/etc/os-release", "r") as f:
+                            content = f.read()
+                            for line in content.splitlines():
+                                if line.startswith("VERSION_ID="):
+                                    ubuntu_version = line.split("=")[1].strip('"')
+                                    break
+                    except:
+                        ubuntu_version = ""
                     
-                    # Méthode 1: Netplan (Ubuntu moderne)
-                    netplan_cmd = f"sudo netplan set ethernets.{iface}.dhcp4=true && sudo netplan apply"
-                    result1 = os.system(netplan_cmd)
+                    log(tr("Distribution Ubuntu/Debian détectée", "Ubuntu/Debian distribution detected") + f" (version: {ubuntu_version})...")
                     
-                    if result1 != 0:
-                        # Méthode 2: NetworkManager
-                        log(tr("Tentative avec NetworkManager...", "Trying with NetworkManager..."))
-                        nm_cmd = f"sudo nmcli con mod {iface} ipv4.method auto && sudo nmcli con up {iface}"
-                        result2 = os.system(nm_cmd)
+                    # Pour Ubuntu 25.04+, NetworkManager est souvent prioritaire
+                    if ubuntu_version and float(ubuntu_version.split('.')[0]) >= 25:
+                        log(tr("Ubuntu 25.04+ détecté, priorité à NetworkManager...", "Ubuntu 25.04+ detected, NetworkManager priority..."))
                         
-                        if result2 != 0:
-                            # Méthode 3: dhclient classique
-                            log(tr("Tentative avec dhclient...", "Trying with dhclient..."))
-                            release_cmd = f"sudo ip addr flush dev {iface}"
-                            os.system(release_cmd)
-                            dhcp_cmd = f"sudo dhclient -r {iface} && sudo dhclient {iface}"
-                            result3 = os.system(dhcp_cmd)
+                        # Méthode 1: NetworkManager (prioritaire pour Ubuntu 25.04+)
+                        # D'abord, s'assurer que l'interface est gérée par NetworkManager
+                        unmanaged_cmd = f"sudo nmcli dev set {iface} managed yes"
+                        os.system(unmanaged_cmd)
+                        
+                        # Supprimer les connexions existantes qui pourraient causer des conflits
+                        cleanup_cmd = f"sudo nmcli con show | grep {iface} | awk '{{print $1}}' | xargs -r sudo nmcli con delete"
+                        os.system(cleanup_cmd)
+                        
+                        # Créer une nouvelle connexion DHCP
+                        nm_cmd = f"sudo nmcli con add type ethernet con-name 'dhcp-{iface}' ifname {iface} && sudo nmcli con mod 'dhcp-{iface}' ipv4.method auto && sudo nmcli con up 'dhcp-{iface}'"
+                        result1 = os.system(nm_cmd)
+                        
+                        if result1 != 0:
+                            # Méthode 2: Netplan avec configuration explicite
+                            log(tr("Tentative avec Netplan (configuration fichier)...", "Trying with Netplan (file configuration)..."))
                             
-                            if result3 == 0:
-                                log(tr("Configuration DHCP appliquée via dhclient sur", "DHCP configuration applied via dhclient on") + f" {iface}")
-                            else:
-                                log(tr("Erreur: Toutes les méthodes DHCP ont échoué sur", "Error: All DHCP methods failed on") + f" {iface}", level="ERROR")
+                            netplan_config = f"""network:
+  version: 2
+  ethernets:
+    {iface}:
+      dhcp4: true
+      dhcp6: false"""
+                            
+                            # Créer un fichier de configuration temporaire
+                            config_file = f"/tmp/99-{iface}-dhcp.yaml"
+                            try:
+                                with open(config_file, "w") as f:
+                                    f.write(netplan_config)
+                                
+                                # Copier la configuration et appliquer
+                                copy_cmd = f"sudo cp {config_file} /etc/netplan/ && sudo netplan apply"
+                                result2 = os.system(copy_cmd)
+                                os.remove(config_file)  # Nettoyer le fichier temporaire
+                                
+                                if result2 != 0:
+                                    # Méthode 3: systemd-networkd (Ubuntu moderne)
+                                    log(tr("Tentative avec systemd-networkd...", "Trying with systemd-networkd..."))
+                                    
+                                    networkd_config = f"""[Match]
+Name={iface}
+
+[Network]
+DHCP=ipv4"""
+                                    
+                                    networkd_file = f"/tmp/25-{iface}.network"
+                                    try:
+                                        with open(networkd_file, "w") as f:
+                                            f.write(networkd_config)
+                                        
+                                        networkd_cmd = f"sudo cp {networkd_file} /etc/systemd/network/ && sudo systemctl restart systemd-networkd"
+                                        result3 = os.system(networkd_cmd)
+                                        os.remove(networkd_file)
+                                        
+                                        if result3 == 0:
+                                            log(tr("Configuration DHCP appliquée via systemd-networkd sur", "DHCP configuration applied via systemd-networkd on") + f" {iface}")
+                                        else:
+                                            # Méthode 4: dhclient en dernier recours
+                                            log(tr("Tentative avec dhclient (méthode de secours)...", "Trying with dhclient (fallback method)..."))
+                                            release_cmd = f"sudo ip addr flush dev {iface} && sudo ip link set {iface} down && sudo ip link set {iface} up"
+                                            os.system(release_cmd)
+                                            dhcp_cmd = f"sudo dhclient -v {iface}"
+                                            result4 = os.system(dhcp_cmd)
+                                            
+                                            if result4 == 0:
+                                                log(tr("Configuration DHCP appliquée via dhclient sur", "DHCP configuration applied via dhclient on") + f" {iface}")
+                                            else:
+                                                log(tr("Erreur: Toutes les méthodes DHCP ont échoué sur", "Error: All DHCP methods failed on") + f" {iface}", level="ERROR")
+                                    except Exception as e:
+                                        log(tr("Erreur systemd-networkd:", "systemd-networkd error:") + f" {str(e)}", level="ERROR")
+                                        result3 = 1
+                                        
+                                else:
+                                    log(tr("Configuration DHCP appliquée via Netplan (fichier) sur", "DHCP configuration applied via Netplan (file) on") + f" {iface}")
+                                    
+                            except Exception as e:
+                                log(tr("Erreur Netplan:", "Netplan error:") + f" {str(e)}", level="ERROR")
+                                result2 = 1
                         else:
                             log(tr("Configuration DHCP appliquée via NetworkManager sur", "DHCP configuration applied via NetworkManager on") + f" {iface}")
+                    
                     else:
-                        log(tr("Configuration DHCP appliquée via Netplan sur", "DHCP configuration applied via Netplan on") + f" {iface}")
+                        # Ubuntu < 25.04 - Méthode classique
+                        log(tr("Ubuntu classique, utilisation de Netplan puis NetworkManager...", "Classic Ubuntu, using Netplan then NetworkManager..."))
+                        
+                        # Méthode 1: Netplan (Ubuntu moderne)
+                        netplan_cmd = f"sudo netplan set ethernets.{iface}.dhcp4=true && sudo netplan apply"
+                        result1 = os.system(netplan_cmd)
+                        
+                        if result1 != 0:
+                            # Méthode 2: NetworkManager
+                            log(tr("Tentative avec NetworkManager...", "Trying with NetworkManager..."))
+                            nm_cmd = f"sudo nmcli con mod {iface} ipv4.method auto && sudo nmcli con up {iface}"
+                            result2 = os.system(nm_cmd)
+                            
+                            if result2 != 0:
+                                # Méthode 3: dhclient classique
+                                log(tr("Tentative avec dhclient...", "Trying with dhclient..."))
+                                release_cmd = f"sudo ip addr flush dev {iface}"
+                                os.system(release_cmd)
+                                dhcp_cmd = f"sudo dhclient -r {iface} && sudo dhclient {iface}"
+                                result3 = os.system(dhcp_cmd)
+                                
+                                if result3 == 0:
+                                    log(tr("Configuration DHCP appliquée via dhclient sur", "DHCP configuration applied via dhclient on") + f" {iface}")
+                                else:
+                                    log(tr("Erreur: Toutes les méthodes DHCP ont échoué sur", "Error: All DHCP methods failed on") + f" {iface}", level="ERROR")
+                            else:
+                                log(tr("Configuration DHCP appliquée via NetworkManager sur", "DHCP configuration applied via NetworkManager on") + f" {iface}")
+                        else:
+                            log(tr("Configuration DHCP appliquée via Netplan sur", "DHCP configuration applied via Netplan on") + f" {iface}")
                     
             elif system == "Darwin":
                 cmd = f"sudo networksetup -setdhcp {iface}"
