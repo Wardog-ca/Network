@@ -612,8 +612,19 @@ def show_network_dashboard():
         stats_content = tk.Frame(stats_frame, bg=colors['bg_card'])
         stats_content.pack(fill=tk.X, padx=8, pady=5)
         
-        total_interfaces = len([k for k in interfaces.keys() if k not in ['lo', 'Loopback']])
-        active_interfaces = len([k for k, v in interfaces.items() if v['status'] == 'UP' and k not in ['lo', 'Loopback']])
+        # Compter les interfaces en appliquant les mêmes filtres que l'affichage
+        filtered_interfaces = {}
+        for k, v in interfaces.items():
+            if k in ['lo', 'lo0', 'Loopback']:
+                continue
+            if k.startswith(('anpi', 'awdl', 'llw', 'gif', 'stf')):
+                continue
+            if k.startswith('utun') and not v['ipv4'] and not v['ipv6']:
+                continue
+            filtered_interfaces[k] = v
+        
+        total_interfaces = len(filtered_interfaces)
+        active_interfaces = len([k for k, v in filtered_interfaces.items() if v['status'] == 'UP'])
         
         # Statistiques en une ligne compacte
         stats_text = f"{active_interfaces}/{total_interfaces} " + tr("actives", "active")
@@ -633,7 +644,14 @@ def show_network_dashboard():
         
         # Créer les cartes d'interfaces compactes
         for iface_name, iface_data in interfaces.items():
-            if iface_name in ['lo', 'Loopback']:  # Ignorer loopback
+            # Ignorer les interfaces système et loopback
+            if iface_name in ['lo', 'lo0', 'Loopback']:
+                continue
+            # Ignorer les interfaces système macOS moins importantes
+            if iface_name.startswith(('anpi', 'awdl', 'llw', 'gif', 'stf')):
+                continue
+            # Afficher seulement les utun qui ont des IPs (VPN actifs)
+            if iface_name.startswith('utun') and not iface_data['ipv4'] and not iface_data['ipv6']:
                 continue
             create_interface_card(scrollable_frame, iface_name, iface_data)
         
