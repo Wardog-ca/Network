@@ -413,8 +413,124 @@ def get_network_interfaces():
 
 def show_network_dashboard():
     """Affiche le dashboard des interfaces réseau avec interface graphique moderne et compact"""
-    dashboard_win = tk.Toplevel(root)
-    dashboard_win.title(tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"))
+    try:
+        log(tr("🔍 Création de la fenêtre dashboard...", "🔍 Creating dashboard window..."))
+        dashboard_win = tk.Toplevel(root)
+        dashboard_win.title(tr("🌐 Dashboard Réseau", "🌐 Network Dashboard"))
+        dashboard_win.geometry("400x500")
+        dashboard_win.configure(bg='#f0f0f0')
+        
+        # Garder au premier plan et positionner à droite
+        dashboard_win.attributes('-topmost', True)
+        screen_width = dashboard_win.winfo_screenwidth()
+        x_pos = screen_width - 420
+        dashboard_win.geometry(f"400x500+{x_pos}+50")
+        
+        # En-tête
+        header_frame = tk.Frame(dashboard_win, bg='#2c3e50', height=50)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        title_label = tk.Label(header_frame, text="🌐 Réseau", 
+                              font=("Arial", 14, "bold"), 
+                              fg='white', bg='#2c3e50')
+        title_label.pack(side=tk.LEFT, padx=15, pady=15)
+        
+        # Frame principal
+        main_frame = tk.Frame(dashboard_win, bg='#f0f0f0')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Canvas avec scroll
+        canvas = tk.Canvas(main_frame, bg='#f0f0f0', highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='#f0f0f0')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        def create_interface_card(parent, iface_name, iface_data):
+            """Crée une carte pour une interface"""
+            card_frame = tk.Frame(parent, bg='white', relief='raised', bd=1)
+            card_frame.pack(fill=tk.X, pady=3, padx=2)
+            
+            header_frame = tk.Frame(card_frame, bg='white')
+            header_frame.pack(fill=tk.X, padx=10, pady=(8, 4))
+            
+            # Icône selon le type
+            if 'en' in iface_name.lower():
+                icon = "🔌"
+            elif 'bridge' in iface_name.lower():
+                icon = "🐳"
+            elif 'utun' in iface_name.lower():
+                icon = "🔒"
+            else:
+                icon = "🌐"
+            
+            status_color = '#27ae60' if iface_data['status'] == 'UP' else '#e74c3c'
+            status_icon = "●" if iface_data['status'] == 'UP' else "○"
+            
+            name_label = tk.Label(header_frame, text=f"{icon} {iface_name}", 
+                                 font=("Arial", 11, "bold"), bg='white')
+            name_label.pack(side=tk.LEFT)
+            
+            status_label = tk.Label(header_frame, text=status_icon, 
+                                   font=("Arial", 12), fg=status_color, bg='white')
+            status_label.pack(side=tk.RIGHT)
+            
+            if iface_data['ipv4']:
+                content_frame = tk.Frame(card_frame, bg='white')
+                content_frame.pack(fill=tk.X, padx=10, pady=(0, 8))
+                
+                ip_label = tk.Label(content_frame, text=iface_data['ipv4'][0], 
+                                   font=("Arial", 10), fg='#3498db', bg='white')
+                ip_label.pack(side=tk.LEFT)
+        
+        def refresh_interfaces():
+            """Actualise les interfaces"""
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
+            
+            interfaces = get_network_interfaces()
+            
+            # Stats
+            stats_frame = tk.Frame(scrollable_frame, bg='white', relief='raised', bd=1)
+            stats_frame.pack(fill=tk.X, pady=(0, 5), padx=2)
+            
+            stats_content = tk.Frame(stats_frame, bg='white')
+            stats_content.pack(fill=tk.X, padx=10, pady=8)
+            
+            # Filtrer interfaces
+            filtered = {k: v for k, v in interfaces.items() 
+                       if k not in ['lo0'] and not k.startswith(('anpi', 'awdl', 'llw', 'gif', 'stf'))
+                       and not (k.startswith('utun') and not v['ipv4'] and not v['ipv6'])}
+            
+            total = len(filtered)
+            active = len([k for k, v in filtered.items() if v['status'] == 'UP'])
+            
+            stats_label = tk.Label(stats_content, text=f"{active}/{total} actives", 
+                                  font=("Arial", 11, "bold"), fg='#27ae60', bg='white')
+            stats_label.pack(side=tk.LEFT)
+            
+            time_label = tk.Label(stats_content, text=time.strftime('%H:%M:%S'), 
+                                 font=("Arial", 9), fg='#7f8c8d', bg='white')
+            time_label.pack(side=tk.RIGHT)
+            
+            for iface_name, iface_data in filtered.items():
+                create_interface_card(scrollable_frame, iface_name, iface_data)
+        
+        refresh_interfaces()
+        log(tr("✓ Dashboard créé avec succès", "✓ Dashboard created successfully"))
+        
+    except Exception as e:
+        log(tr(f"❌ Erreur création dashboard: {e}", f"❌ Error creating dashboard: {e}"), level="ERROR")
     
     # Taille initiale plus petite, sera ajustée dynamiquement
     dashboard_win.geometry("400x300")
@@ -1408,8 +1524,13 @@ threading.Thread(target=auto_sync, daemon=True).start()
 # --- Ouvrir automatiquement le dashboard après un court délai ---
 def open_dashboard_auto():
     """Ouvre automatiquement le dashboard au démarrage"""
-    log(tr("🌐 Ouverture automatique du dashboard réseau...", "🌐 Automatically opening network dashboard..."))
-    show_network_dashboard()
+    try:
+        log(tr("🌐 Ouverture automatique du dashboard réseau...", "🌐 Automatically opening network dashboard..."))
+        log(tr("✓ Root window créée, tentative d'ouverture du dashboard", "✓ Root window created, attempting to open dashboard"))
+        show_network_dashboard()
+        log(tr("✓ Dashboard ouvert avec succès", "✓ Dashboard opened successfully"))
+    except Exception as e:
+        log(tr(f"❌ Erreur lors de l'ouverture du dashboard: {e}", f"❌ Error opening dashboard: {e}"), level="ERROR")
 
 # Délai de 1 seconde pour permettre à la fenêtre principale de se charger
 root.after(1000, open_dashboard_auto)
