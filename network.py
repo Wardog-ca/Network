@@ -208,6 +208,12 @@ def set_ip_manual():
     var_iface = tk.StringVar(value=interfaces[0] if interfaces else "")
     tk.OptionMenu(win, var_iface, *interfaces).pack(pady=5)
 
+    # Option pour choisir entre IP statique et DHCP
+    tk.Label(win, text=tr("Type de configuration :", "Configuration type:")).pack(pady=5)
+    config_type = tk.StringVar(value="static")
+    tk.Radiobutton(win, text=tr("IP Statique", "Static IP"), variable=config_type, value="static").pack()
+    tk.Radiobutton(win, text="DHCP", variable=config_type, value="dhcp").pack()
+
     tk.Label(win, text=tr("Adresse IP :", "IP address:")).pack(pady=5)
     ip_entry = tk.Entry(win)
     ip_entry.pack(pady=5)
@@ -215,26 +221,53 @@ def set_ip_manual():
 
     def apply_ip():
         iface = var_iface.get().strip()
-        ip = ip_entry.get().strip()
         system = platform.system()
         cmd = None
-        if not iface or not ip:
-            log(tr("Interface ou IP non spécifiée.", "Interface or IP not specified."))
+        
+        if not iface:
+            log(tr("Interface réseau non spécifiée.", "Network interface not specified."))
             return
-        if system == "Windows":
-            cmd = f'netsh interface ip set address name="{iface}" static {ip} 255.255.255.0 192.168.1.1'
-        elif system == "Linux":
-            cmd = f"sudo ip addr flush dev {iface} && sudo ip addr add {ip}/24 dev {iface} && sudo ip route add default via 192.168.1.1"
-        elif system == "Darwin":
-            cmd = f"sudo networksetup -setmanual {iface} {ip} 255.255.255.0 192.168.1.1"
-        if cmd:
-            result = os.system(cmd)
-            if result == 0:
-                log(tr("Configuration appliquée sur", "Configuration applied on") + f" {iface}")
+            
+        if config_type.get() == "dhcp":
+            # Configuration DHCP
+            if system == "Windows":
+                cmd = f'netsh interface ip set address name="{iface}" dhcp'
+            elif system == "Linux":
+                cmd = f"sudo dhclient {iface}"
+            elif system == "Darwin":
+                cmd = f"sudo networksetup -setdhcp {iface}"
+            
+            if cmd:
+                result = os.system(cmd)
+                if result == 0:
+                    log(tr("Configuration DHCP appliquée sur", "DHCP configuration applied on") + f" {iface}")
+                else:
+                    log(tr("Erreur lors de l'application du DHCP sur l'interface", "Error applying DHCP on interface") + f" '{iface}'.")
             else:
-                log(tr("Erreur lors de l'exécution de la commande pour l'interface", "Error executing command for interface") + f" '{iface}'.")
+                log(tr("Système non supporté.", "Unsupported system."))
         else:
-            log(tr("Système non supporté.", "Unsupported system."))
+            # Configuration IP statique
+            ip = ip_entry.get().strip()
+            if not ip:
+                log(tr("Adresse IP non spécifiée.", "IP address not specified."))
+                return
+                
+            if system == "Windows":
+                cmd = f'netsh interface ip set address name="{iface}" static {ip} 255.255.255.0 192.168.1.1'
+            elif system == "Linux":
+                cmd = f"sudo ip addr flush dev {iface} && sudo ip addr add {ip}/24 dev {iface} && sudo ip route add default via 192.168.1.1"
+            elif system == "Darwin":
+                cmd = f"sudo networksetup -setmanual {iface} {ip} 255.255.255.0 192.168.1.1"
+            
+            if cmd:
+                result = os.system(cmd)
+                if result == 0:
+                    log(tr("Configuration IP statique appliquée sur", "Static IP configuration applied on") + f" {iface}")
+                else:
+                    log(tr("Erreur lors de l'exécution de la commande pour l'interface", "Error executing command for interface") + f" '{iface}'.")
+            else:
+                log(tr("Système non supporté.", "Unsupported system."))
+        
         win.destroy()
 
     tk.Button(win, text=tr("Appliquer", "Apply"), command=apply_ip).pack(pady=10)
