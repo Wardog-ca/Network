@@ -2,6 +2,7 @@
 import os
 import platform
 import shutil
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -430,22 +431,32 @@ def show_network_dashboard():
         dashboard_win.grid_rowconfigure(1, weight=1)
         dashboard_win.grid_columnconfigure(0, weight=1)
         
-        # En-tête - ROW 0 (en haut)
-        header_frame = tk.Frame(dashboard_win, bg='#2c3e50', height=50)
+        # En-tête moderne - ROW 0 (en haut)
+        header_frame = tk.Frame(dashboard_win, bg=COLORS['primary'], height=60)
         header_frame.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
         header_frame.grid_propagate(False)
         
-        title_label = tk.Label(header_frame, text="🌐 Réseau", 
-                              font=("Arial", 14, "bold"), 
-                              fg='white', bg='#2c3e50')
-        title_label.pack(side=tk.LEFT, padx=15, pady=15)
+        title_label = tk.Label(header_frame, text="🌐 Network Dashboard Pro", 
+                              font=("Arial", 16, "bold"), 
+                              fg=COLORS['white'], bg=COLORS['primary'])
+        title_label.pack(side=tk.LEFT, padx=20, pady=15)
         
-        # Bouton refresh dans l'en-tête
-        refresh_btn = tk.Button(header_frame, text="🔄", 
-                               font=("Arial", 10), bg='#3498db', fg='white',
-                               relief='flat', padx=10, pady=5,
+        # Groupe de boutons dans l'en-tête
+        btn_frame = tk.Frame(header_frame, bg=COLORS['primary'])
+        btn_frame.pack(side=tk.RIGHT, padx=15, pady=10)
+        
+        refresh_btn = tk.Button(btn_frame, text="🔄", 
+                               font=("Arial", 11), bg=COLORS['info'], fg=COLORS['white'],
+                               relief='flat', padx=12, pady=6,
                                command=lambda: refresh_interfaces())
-        refresh_btn.pack(side=tk.RIGHT, padx=15, pady=10)
+        refresh_btn.pack(side=tk.RIGHT, padx=3)
+        
+        pin_btn = tk.Button(btn_frame, text="📌", 
+                           font=("Arial", 11), bg=COLORS['warning'], fg=COLORS['white'],
+                           relief='flat', padx=12, pady=6,
+                           command=lambda: dashboard_win.attributes('-topmost', 
+                                   not dashboard_win.attributes('-topmost')))
+        pin_btn.pack(side=tk.RIGHT, padx=3)
         
         # Frame principal - ROW 1 (en bas, expansible)
         main_frame = tk.Frame(dashboard_win, bg='#f0f0f0')
@@ -468,41 +479,86 @@ def show_network_dashboard():
         scrollbar.pack(side="right", fill="y")
         
         def create_interface_card(parent, iface_name, iface_data):
-            """Crée une carte pour une interface"""
-            card_frame = tk.Frame(parent, bg='white', relief='raised', bd=1)
-            card_frame.pack(fill=tk.X, pady=3, padx=2)
+            """Crée une carte moderne pour une interface"""
+            # Carte avec style moderne
+            card_frame = tk.Frame(parent, bg=COLORS['white'], relief='flat', bd=0)
+            card_frame.pack(fill=tk.X, pady=4, padx=8)
             
-            header_frame = tk.Frame(card_frame, bg='white')
-            header_frame.pack(fill=tk.X, padx=10, pady=(8, 4))
+            # Barre colorée sur le côté selon le statut
+            status_color = COLORS['success'] if iface_data['status'] == 'UP' else COLORS['danger']
+            status_bar = tk.Frame(card_frame, bg=status_color, width=4)
+            status_bar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
             
-            # Icône selon le type
+            # Contenu de la carte
+            content_frame = tk.Frame(card_frame, bg=COLORS['white'])
+            content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=12)
+            
+            # En-tête avec icône et nom
+            header_frame = tk.Frame(content_frame, bg=COLORS['white'])
+            header_frame.pack(fill=tk.X, pady=(0, 8))
+            
+            # Icône selon le type avec couleurs
             if 'en' in iface_name.lower():
                 icon = "🔌"
+                type_color = COLORS['info']
             elif 'bridge' in iface_name.lower():
                 icon = "🐳"
+                type_color = COLORS['secondary']
             elif 'utun' in iface_name.lower():
                 icon = "🔒"
+                type_color = COLORS['warning']
+            elif 'wlan' in iface_name.lower() or 'wifi' in iface_name.lower():
+                icon = "📶"
+                type_color = COLORS['success']
             else:
                 icon = "🌐"
+                type_color = COLORS['dark']
             
-            status_color = '#27ae60' if iface_data['status'] == 'UP' else '#e74c3c'
-            status_icon = "●" if iface_data['status'] == 'UP' else "○"
+            # Nom avec style
+            name_frame = tk.Frame(header_frame, bg=COLORS['white'])
+            name_frame.pack(side=tk.LEFT)
             
-            name_label = tk.Label(header_frame, text=f"{icon} {iface_name}", 
-                                 font=("Arial", 11, "bold"), bg='white')
+            icon_label = tk.Label(name_frame, text=icon, 
+                                 font=("Arial", 14), bg=COLORS['white'])
+            icon_label.pack(side=tk.LEFT, padx=(0, 8))
+            
+            name_label = tk.Label(name_frame, text=iface_name, 
+                                 font=("Arial", 12, "bold"), 
+                                 fg=type_color, bg=COLORS['white'])
             name_label.pack(side=tk.LEFT)
             
-            status_label = tk.Label(header_frame, text=status_icon, 
-                                   font=("Arial", 12), fg=status_color, bg='white')
-            status_label.pack(side=tk.RIGHT)
+            # Badge de statut moderne
+            status_text = "ACTIF" if iface_data['status'] == 'UP' else "INACTIF"
+            status_badge = tk.Label(header_frame, text=status_text, 
+                                   font=("Arial", 9, "bold"), 
+                                   fg=COLORS['white'], bg=status_color,
+                                   padx=8, pady=2)
+            status_badge.pack(side=tk.RIGHT)
             
+            # Informations IP si disponibles
             if iface_data['ipv4']:
-                content_frame = tk.Frame(card_frame, bg='white')
-                content_frame.pack(fill=tk.X, padx=10, pady=(0, 8))
+                ip_frame = tk.Frame(content_frame, bg=COLORS['white'])
+                ip_frame.pack(fill=tk.X, pady=(0, 4))
                 
-                ip_label = tk.Label(content_frame, text=iface_data['ipv4'][0], 
-                                   font=("Arial", 10), fg='#3498db', bg='white')
-                ip_label.pack(side=tk.LEFT)
+                tk.Label(ip_frame, text="IPv4:", 
+                        font=("Arial", 9), fg=COLORS['dark'], bg=COLORS['white']).pack(side=tk.LEFT)
+                
+                ip_label = tk.Label(ip_frame, text=iface_data['ipv4'][0], 
+                                   font=("Arial", 10, "bold"), 
+                                   fg=COLORS['info'], bg=COLORS['white'])
+                ip_label.pack(side=tk.LEFT, padx=(5, 0))
+                
+                # Indicateur pour IPs multiples
+                if len(iface_data['ipv4']) > 1:
+                    multi_badge = tk.Label(ip_frame, text=f"+{len(iface_data['ipv4'])-1}", 
+                                          font=("Arial", 8), 
+                                          fg=COLORS['white'], bg=COLORS['secondary'],
+                                          padx=4, pady=1)
+                    multi_badge.pack(side=tk.LEFT, padx=(8, 0))
+            
+            # Ligne de séparation subtile
+            separator = tk.Frame(parent, bg=COLORS['light'], height=1)
+            separator.pack(fill=tk.X, padx=20)
         
         def refresh_interfaces():
             """Actualise les interfaces"""
@@ -1410,14 +1466,30 @@ DEVICE_IPS = {
 }
 
 root = tk.Tk()
-root.title("Network Team - Simple")
-root.geometry("600x400")
+root.title("🌐 Network Team Professional")
+root.geometry("800x600")
+
+# Couleurs modernes
+COLORS = {
+    'primary': '#2c3e50',
+    'secondary': '#34495e', 
+    'success': '#27ae60',
+    'danger': '#e74c3c',
+    'warning': '#f39c12',
+    'info': '#3498db',
+    'light': '#ecf0f1',
+    'dark': '#2c3e50',
+    'white': '#ffffff'
+}
+
+# Style moderne pour la fenêtre
+root.configure(bg=COLORS['light'])
 
 # Positionner la fenêtre principale à gauche pour laisser la place au dashboard
-root.geometry("600x400+50+50")
+root.geometry("800x600+50+50")
 
 # Création des menus AVANT les autres widgets
-menubar = tk.Menu(root)
+menubar = tk.Menu(root, bg=COLORS['primary'], fg=COLORS['white'])
 
 # Language menu
 menu_lang = tk.Menu(menubar, tearoff=0)
@@ -1495,9 +1567,418 @@ menubar.add_cascade(label=tr("Synchronisation / USB", "Sync / USB"), menu=menu_s
 # Configurer le menu sur la fenêtre AVANT d'ajouter d'autres widgets
 root.config(menu=menubar)
 
-# Maintenant ajouter le widget de log
-log_text = tk.Text(root, height=15, state='disabled')
-log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+# Interface principale moderne avec sections
+main_container = tk.Frame(root, bg=COLORS['light'])
+main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+
+# En-tête avec titre et informations
+header_frame = tk.Frame(main_container, bg=COLORS['primary'], height=80)
+header_frame.pack(fill=tk.X, pady=(0, 15))
+header_frame.pack_propagate(False)
+
+title_label = tk.Label(header_frame, text="🌐 Network Team Professional", 
+                      font=("Arial", 18, "bold"), 
+                      fg=COLORS['white'], bg=COLORS['primary'])
+title_label.pack(side=tk.LEFT, padx=20, pady=25)
+
+status_label = tk.Label(header_frame, text="🟢 Ready", 
+                       font=("Arial", 12), 
+                       fg=COLORS['success'], bg=COLORS['primary'])
+status_label.pack(side=tk.RIGHT, padx=20, pady=25)
+
+# Section des outils rapides
+tools_frame = tk.LabelFrame(main_container, text="🛠️ Outils Rapides", 
+                           font=("Arial", 12, "bold"),
+                           bg=COLORS['light'], fg=COLORS['dark'],
+                           padx=10, pady=10)
+tools_frame.pack(fill=tk.X, pady=(0, 15))
+
+# Boutons d'outils dans une grille
+tools_grid = tk.Frame(tools_frame, bg=COLORS['light'])
+tools_grid.pack(fill=tk.X)
+
+# Section des logs
+log_frame = tk.LabelFrame(main_container, text="📝 Journal d'activité", 
+                         font=("Arial", 12, "bold"),
+                         bg=COLORS['light'], fg=COLORS['dark'],
+                         padx=10, pady=10)
+log_frame.pack(fill=tk.BOTH, expand=True)
+
+log_text = tk.Text(log_frame, height=12, state='disabled',
+                  bg=COLORS['white'], fg=COLORS['dark'],
+                  font=("Consolas", 10), relief='flat',
+                  wrap=tk.WORD)
+log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+# Scrollbar pour les logs
+log_scrollbar = tk.Scrollbar(log_text)
+log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+log_text.config(yscrollcommand=log_scrollbar.set)
+log_scrollbar.config(command=log_text.yview)
+
+
+
+def create_professional_tools():
+    """Crée les boutons pour les outils professionnels"""
+    
+    # Outils réseau professionnels
+    tools_data = [
+        {
+            'name': 'Wireshark',
+            'icon': '🦈',
+            'description': 'Analyseur de protocoles réseau',
+            'command': ['wireshark'] if platform.system() != 'Windows' else ['C:/Program Files/Wireshark/Wireshark.exe'],
+            'color': COLORS['info']
+        },
+        {
+            'name': 'TFTP Server',
+            'icon': '📁',
+            'description': 'Serveur TFTP pour transferts',
+            'command': ['python3', '-m', 'http.server', '69'],  # Sera remplacé par un vrai serveur TFTP
+            'color': COLORS['success']
+        },
+        {
+            'name': 'Rufus',
+            'icon': '💾',
+            'description': 'Création de clés USB bootables',
+            'command': ['rufus'] if platform.system() == 'Windows' else ['balenaetcher'],
+            'color': COLORS['warning']
+        },
+        {
+            'name': 'Network Scanner',
+            'icon': '🔍',
+            'description': 'Scanner réseau (nmap)',
+            'command': ['nmap', '-sn'],  # Scan ping
+            'color': COLORS['secondary']
+        },
+        {
+            'name': 'SSH Client',
+            'icon': '🔐',
+            'description': 'Client SSH intégré',
+            'command': 'builtin_ssh',
+            'color': COLORS['dark']
+        },
+        {
+            'name': 'IP Calculator',
+            'icon': '🧮',
+            'description': 'Calculateur IP/Subnets',
+            'command': 'builtin_ipcalc',
+            'color': COLORS['info']
+        }
+    ]
+    
+    # Créer les boutons dans une grille 3x2
+    row = 0
+    col = 0
+    for tool in tools_data:
+        tool_btn = tk.Button(tools_grid, 
+                           text=f"{tool['icon']}\n{tool['name']}", 
+                           font=("Arial", 10, "bold"),
+                           bg=tool['color'], fg=COLORS['white'],
+                           relief='flat', padx=15, pady=10,
+                           width=12, height=3,
+                           command=lambda t=tool: launch_professional_tool(t))
+        tool_btn.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
+        
+        # Tooltip au survol
+        create_tooltip(tool_btn, tool['description'])
+        
+        col += 1
+        if col > 2:  # 3 colonnes max
+            col = 0
+            row += 1
+    
+    # Configurer les colonnes pour qu'elles s'étendent
+    for i in range(3):
+        tools_grid.grid_columnconfigure(i, weight=1)
+
+def create_tooltip(widget, text):
+    """Crée un tooltip pour un widget"""
+    def on_enter(event):
+        tooltip = tk.Toplevel()
+        tooltip.wm_overrideredirect(True)
+        tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+        label = tk.Label(tooltip, text=text, background=COLORS['dark'], 
+                        foreground=COLORS['white'], font=("Arial", 9))
+        label.pack()
+        widget.tooltip = tooltip
+    
+    def on_leave(event):
+        if hasattr(widget, 'tooltip'):
+            widget.tooltip.destroy()
+            del widget.tooltip
+    
+    widget.bind("<Enter>", on_enter)
+    widget.bind("<Leave>", on_leave)
+
+def launch_professional_tool(tool):
+    """Lance un outil professionnel"""
+    try:
+        log(f"🚀 Lancement de {tool['name']}...")
+        
+        if tool['command'] == 'builtin_ssh':
+            show_ssh_client()
+        elif tool['command'] == 'builtin_ipcalc':
+            show_ip_calculator()
+        elif isinstance(tool['command'], list):
+            if tool['name'] == 'TFTP Server':
+                start_tftp_server()
+            elif tool['name'] == 'Network Scanner':
+                show_network_scanner()
+            else:
+                # Lancer l'application externe
+                subprocess.Popen(tool['command'])
+                log(f"✅ {tool['name']} lancé avec succès")
+        
+    except FileNotFoundError:
+        log(f"❌ {tool['name']} n'est pas installé sur ce système", level="ERROR")
+        show_install_instructions(tool)
+    except Exception as e:
+        log(f"❌ Erreur lors du lancement de {tool['name']}: {e}", level="ERROR")
+
+def show_install_instructions(tool):
+    """Affiche les instructions d'installation pour un outil"""
+    install_win = tk.Toplevel(root)
+    install_win.title(f"Installation - {tool['name']}")
+    install_win.geometry("500x300")
+    install_win.configure(bg=COLORS['light'])
+    
+    title = tk.Label(install_win, text=f"Installation de {tool['name']}", 
+                    font=("Arial", 14, "bold"), bg=COLORS['light'])
+    title.pack(pady=20)
+    
+    instructions = get_install_instructions(tool['name'])
+    
+    text_widget = tk.Text(install_win, wrap=tk.WORD, bg=COLORS['white'])
+    text_widget.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    text_widget.insert(tk.END, instructions)
+    text_widget.config(state='disabled')
+
+def get_install_instructions(tool_name):
+    """Retourne les instructions d'installation pour un outil"""
+    instructions = {
+        'Wireshark': """
+Pour installer Wireshark:
+
+macOS:
+• brew install wireshark
+• ou télécharger depuis https://www.wireshark.org/
+
+Windows:
+• Télécharger depuis https://www.wireshark.org/
+• Exécuter l'installateur en tant qu'administrateur
+
+Linux:
+• Ubuntu/Debian: sudo apt install wireshark
+• CentOS/RHEL: sudo yum install wireshark
+        """,
+        'Rufus': """
+Pour installer Rufus/BalenaEtcher:
+
+macOS:
+• brew install balenaetcher
+• ou télécharger depuis https://www.balena.io/etcher/
+
+Windows:
+• Télécharger Rufus depuis https://rufus.ie/
+• Portable, pas d'installation requise
+
+Linux:
+• AppImage disponible sur https://www.balena.io/etcher/
+        """,
+        'Network Scanner': """
+Pour installer nmap:
+
+macOS:
+• brew install nmap
+
+Windows:
+• Télécharger depuis https://nmap.org/download.html
+
+Linux:
+• Ubuntu/Debian: sudo apt install nmap
+• CentOS/RHEL: sudo yum install nmap
+        """
+    }
+    
+    return instructions.get(tool_name, f"Instructions d'installation non disponibles pour {tool_name}")
+
+def show_ssh_client():
+    """Affiche un client SSH intégré"""
+    ssh_win = tk.Toplevel(root)
+    ssh_win.title("🔐 Client SSH")
+    ssh_win.geometry("600x500")
+    ssh_win.configure(bg=COLORS['light'])
+    
+    # Frame de connexion
+    conn_frame = tk.LabelFrame(ssh_win, text="Connexion SSH", bg=COLORS['light'])
+    conn_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    tk.Label(conn_frame, text="Hôte:", bg=COLORS['light']).grid(row=0, column=0, sticky='w', padx=5, pady=5)
+    host_entry = tk.Entry(conn_frame, width=30)
+    host_entry.grid(row=0, column=1, padx=5, pady=5)
+    
+    tk.Label(conn_frame, text="Utilisateur:", bg=COLORS['light']).grid(row=0, column=2, sticky='w', padx=5, pady=5)
+    user_entry = tk.Entry(conn_frame, width=20)
+    user_entry.grid(row=0, column=3, padx=5, pady=5)
+    
+    def connect_ssh():
+        host = host_entry.get()
+        user = user_entry.get()
+        if host and user:
+            log(f"🔐 Connexion SSH à {user}@{host}...")
+            # Ouvrir terminal SSH externe
+            if platform.system() == "Darwin":
+                subprocess.Popen(['osascript', '-e', f'tell app "Terminal" to do script "ssh {user}@{host}"'])
+            elif platform.system() == "Windows":
+                subprocess.Popen(['cmd', '/c', 'start', 'ssh', f'{user}@{host}'])
+            else:
+                subprocess.Popen(['gnome-terminal', '--', 'ssh', f'{user}@{host}'])
+    
+    tk.Button(conn_frame, text="Connecter", command=connect_ssh, 
+             bg=COLORS['success'], fg=COLORS['white']).grid(row=0, column=4, padx=10, pady=5)
+
+def show_ip_calculator():
+    """Calculateur IP/Subnets"""
+    calc_win = tk.Toplevel(root)
+    calc_win.title("🧮 Calculateur IP")
+    calc_win.geometry("500x400")
+    calc_win.configure(bg=COLORS['light'])
+    
+    # Interface de calcul
+    input_frame = tk.LabelFrame(calc_win, text="Entrée", bg=COLORS['light'])
+    input_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    tk.Label(input_frame, text="IP/CIDR:", bg=COLORS['light']).grid(row=0, column=0, sticky='w', padx=5, pady=5)
+    ip_entry = tk.Entry(input_frame, width=20)
+    ip_entry.grid(row=0, column=1, padx=5, pady=5)
+    ip_entry.insert(0, "192.168.1.1/24")
+    
+    result_text = tk.Text(calc_win, height=15, bg=COLORS['white'])
+    result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    def calculate_subnet():
+        try:
+            ip_cidr = ip_entry.get()
+            import ipaddress
+            network = ipaddress.IPv4Network(ip_cidr, strict=False)
+            
+            result = f"""
+Réseau: {network}
+Adresse réseau: {network.network_address}
+Masque de sous-réseau: {network.netmask}
+Adresse de broadcast: {network.broadcast_address}
+Nombre d'hôtes: {network.num_addresses - 2}
+Première adresse utilisable: {list(network.hosts())[0] if network.num_addresses > 2 else 'N/A'}
+Dernière adresse utilisable: {list(network.hosts())[-1] if network.num_addresses > 2 else 'N/A'}
+
+Plages d'adresses:
+"""
+            for i, addr in enumerate(network.hosts()):
+                if i < 10:  # Afficher les 10 premières
+                    result += f"  {addr}\n"
+                elif i == 10:
+                    result += f"  ... et {network.num_addresses - 12} autres\n"
+                    break
+            
+            result_text.delete(1.0, tk.END)
+            result_text.insert(tk.END, result)
+            
+        except Exception as e:
+            result_text.delete(1.0, tk.END)
+            result_text.insert(tk.END, f"Erreur: {e}")
+    
+    tk.Button(input_frame, text="Calculer", command=calculate_subnet,
+             bg=COLORS['info'], fg=COLORS['white']).grid(row=0, column=2, padx=10, pady=5)
+
+def start_tftp_server():
+    """Démarre un serveur TFTP simple"""
+    log("🚀 Démarrage du serveur TFTP...")
+    # Pour l'instant, un serveur HTTP simple
+    try:
+        import threading
+        import http.server
+        import socketserver
+        
+        PORT = 8069  # Port TFTP alternatif
+        
+        def run_server():
+            with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
+                log(f"✅ Serveur TFTP/HTTP démarré sur le port {PORT}")
+                httpd.serve_forever()
+        
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        
+    except Exception as e:
+        log(f"❌ Erreur serveur TFTP: {e}", level="ERROR")
+
+def show_network_scanner():
+    """Scanner réseau intégré"""
+    scanner_win = tk.Toplevel(root)
+    scanner_win.title("🔍 Scanner Réseau")
+    scanner_win.geometry("600x500")
+    scanner_win.configure(bg=COLORS['light'])
+    
+    # Interface de scan
+    scan_frame = tk.LabelFrame(scanner_win, text="Configuration du scan", bg=COLORS['light'])
+    scan_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    tk.Label(scan_frame, text="Réseau:", bg=COLORS['light']).grid(row=0, column=0, sticky='w', padx=5, pady=5)
+    network_entry = tk.Entry(scan_frame, width=20)
+    network_entry.grid(row=0, column=1, padx=5, pady=5)
+    network_entry.insert(0, "192.168.1.0/24")
+    
+    result_text = tk.Text(scanner_win, height=20, bg=COLORS['white'], font=("Consolas", 9))
+    result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    def scan_network():
+        network = network_entry.get()
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, f"🔍 Scan du réseau {network}...\n\n")
+        result_text.update()
+        
+        try:
+            import ipaddress
+            net = ipaddress.IPv4Network(network, strict=False)
+            
+            # Scan ping simple
+            import concurrent.futures
+            import subprocess
+            
+            def ping_host(ip):
+                try:
+                    if platform.system() == "Windows":
+                        result = subprocess.run(['ping', '-n', '1', '-w', '1000', str(ip)], 
+                                              capture_output=True, text=True, timeout=2)
+                    else:
+                        result = subprocess.run(['ping', '-c', '1', '-W', '1', str(ip)], 
+                                              capture_output=True, text=True, timeout=2)
+                    
+                    if result.returncode == 0:
+                        return str(ip)
+                    return None
+                except:
+                    return None
+            
+            active_hosts = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+                futures = [executor.submit(ping_host, ip) for ip in net.hosts()]
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result:
+                        active_hosts.append(result)
+                        result_text.insert(tk.END, f"🟢 {result} - ACTIF\n")
+                        result_text.see(tk.END)
+                        result_text.update()
+            
+            result_text.insert(tk.END, f"\n✅ Scan terminé. {len(active_hosts)} hôtes actifs trouvés.\n")
+            
+        except Exception as e:
+            result_text.insert(tk.END, f"❌ Erreur: {e}\n")
+    
+    tk.Button(scan_frame, text="Scanner", command=scan_network,
+             bg=COLORS['info'], fg=COLORS['white']).grid(row=0, column=2, padx=10, pady=5)
 
 def update_ui_language():
     # Mise à jour des sous-menus seulement
@@ -1530,6 +2011,9 @@ else:
     log(tr("📁 Dossier de travail:", "📁 Working folder:") + f" {LOCAL_PATH}")
 
 log(tr("✅ Network Team Application démarrée", "✅ Network Team Application started"))
+
+# --- Créer les outils professionnels ---
+create_professional_tools()
 
 # --- Lancer la synchronisation automatique ---
 threading.Thread(target=auto_sync, daemon=True).start()
