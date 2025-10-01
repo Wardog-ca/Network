@@ -1712,7 +1712,7 @@ def create_tooltip(widget, text):
     widget.bind("<Leave>", on_leave)
 
 def launch_professional_tool(tool):
-    """Lance un outil professionnel"""
+    """Lance un outil professionnel avec gestion d'erreurs améliorée"""
     try:
         log(f"🚀 Lancement de {tool['name']}...")
         
@@ -1726,15 +1726,40 @@ def launch_professional_tool(tool):
             elif tool['name'] == 'Network Scanner':
                 show_network_scanner()
             else:
-                # Lancer l'application externe
-                subprocess.Popen(tool['command'])
-                log(f"✅ {tool['name']} lancé avec succès")
+                # Vérifier si la commande existe avant de la lancer
+                cmd_exists = False
+                if tool['command']:
+                    try:
+                        # Tester si la commande est disponible
+                        if platform.system() == "Windows":
+                            subprocess.run(['where', tool['command'][0]], 
+                                         capture_output=True, check=True)
+                        else:
+                            subprocess.run(['which', tool['command'][0]], 
+                                         capture_output=True, check=True)
+                        cmd_exists = True
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        cmd_exists = False
+                
+                if cmd_exists:
+                    # Lancer l'application externe
+                    subprocess.Popen(tool['command'], 
+                                   stdout=subprocess.DEVNULL, 
+                                   stderr=subprocess.DEVNULL)
+                    log(f"✅ {tool['name']} lancé avec succès")
+                else:
+                    raise FileNotFoundError(f"{tool['command'][0]} not found")
         
     except FileNotFoundError:
         log(f"❌ {tool['name']} n'est pas installé sur ce système", level="ERROR")
         show_install_instructions(tool)
+    except subprocess.CalledProcessError:
+        log(f"❌ {tool['name']} n'est pas disponible", level="ERROR")
+        show_install_instructions(tool)
     except Exception as e:
         log(f"❌ Erreur lors du lancement de {tool['name']}: {e}", level="ERROR")
+        # Proposer une solution alternative
+        show_alternative_solution(tool)
 
 def show_install_instructions(tool):
     """Affiche les instructions d'installation pour un outil"""
@@ -1803,6 +1828,113 @@ Linux:
     
     return instructions.get(tool_name, f"Instructions d'installation non disponibles pour {tool_name}")
 
+def show_alternative_solution(tool):
+    """Propose des solutions alternatives quand un outil ne fonctionne pas"""
+    alt_win = tk.Toplevel(root)
+    alt_win.title(f"Solutions alternatives - {tool['name']}")
+    alt_win.geometry("600x400")
+    alt_win.configure(bg=COLORS['light'])
+    
+    title = tk.Label(alt_win, text=f"🔧 Solutions pour {tool['name']}", 
+                    font=("Arial", 14, "bold"), bg=COLORS['light'])
+    title.pack(pady=20)
+    
+    alternatives = get_alternatives(tool['name'])
+    
+    text_widget = tk.Text(alt_win, wrap=tk.WORD, bg=COLORS['white'], 
+                         font=("Arial", 10), padx=10, pady=10)
+    text_widget.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+    text_widget.insert(tk.END, alternatives)
+    text_widget.config(state='disabled')
+    
+    # Bouton pour fermer
+    tk.Button(alt_win, text="Fermer", command=alt_win.destroy,
+             bg=COLORS['secondary'], fg=COLORS['white']).pack(pady=10)
+
+def get_alternatives(tool_name):
+    """Retourne des solutions alternatives pour un outil"""
+    alternatives = {
+        'Wireshark': """
+Solutions alternatives pour Wireshark:
+
+1. 📱 Wireshark en ligne de commande:
+   • tshark (version CLI de Wireshark)
+   • tcpdump (outil natif Linux/macOS)
+   
+2. 🌐 Outils web:
+   • CloudShark (analyse en ligne)
+   • PacketLife (outils réseau en ligne)
+   
+3. 🔧 Commandes intégrées:
+   • netstat -an (connexions actives)
+   • ss -tuln (sockets)
+   • lsof -i (processus réseau)
+
+Commandes utiles:
+• sudo tcpdump -i any -w capture.pcap
+• netstat -rn (table de routage)
+• ping -c 4 google.com (test connectivité)
+        """,
+        'SSH Client': """
+Solutions alternatives pour SSH:
+
+1. 💻 Clients SSH alternatifs:
+   • PuTTY (Windows)
+   • Termius (multiplateforme)
+   • OpenSSH natif
+   
+2. 🌐 SSH via navigateur:
+   • Shell In A Box
+   • Webssh
+   
+3. 🔧 Ligne de commande directe:
+   • Ouvrez un terminal manuellement
+   • Tapez: ssh username@hostname
+   
+Configuration SSH recommandée:
+• Générer des clés: ssh-keygen -t ed25519
+• Copier la clé: ssh-copy-id user@host
+        """,
+        'Network Scanner': """
+Solutions alternatives pour le scanner réseau:
+
+1. 🔍 Outils de scan alternatifs:
+   • Angry IP Scanner (GUI)
+   • Advanced IP Scanner (Windows)
+   • LanScan (macOS)
+   
+2. 🖥️ Commandes natives:
+   • ping (test d'hôte unique)
+   • arp -a (table ARP)
+   • netdiscover (Linux)
+   
+3. 📱 Applications mobiles:
+   • Fing (iOS/Android)
+   • Network Analyzer (mobile)
+
+Commandes utiles:
+• for i in {1..254}; do ping -c1 192.168.1.$i; done
+• arp-scan -l (scan réseau local)
+        """
+    }
+    
+    return alternatives.get(tool_name, f"""
+Solutions générales:
+
+1. 🔍 Recherche en ligne:
+   • Cherchez des alternatives à {tool_name}
+   • Consultez les forums techniques
+   
+2. 📦 Gestionnaires de paquets:
+   • macOS: brew search {tool_name.lower()}
+   • Windows: winget search {tool_name.lower()}
+   • Linux: apt search {tool_name.lower()}
+   
+3. 🌐 Versions web:
+   • Recherchez des versions en ligne de l'outil
+   • Utilisez des services cloud équivalents
+    """)
+
 def show_ssh_client():
     """Affiche un client SSH intégré"""
     ssh_win = tk.Toplevel(root)
@@ -1827,16 +1959,74 @@ def show_ssh_client():
         user = user_entry.get()
         if host and user:
             log(f"🔐 Connexion SSH à {user}@{host}...")
-            # Ouvrir terminal SSH externe
-            if platform.system() == "Darwin":
-                subprocess.Popen(['osascript', '-e', f'tell app "Terminal" to do script "ssh {user}@{host}"'])
-            elif platform.system() == "Windows":
-                subprocess.Popen(['cmd', '/c', 'start', 'ssh', f'{user}@{host}'])
-            else:
-                subprocess.Popen(['gnome-terminal', '--', 'ssh', f'{user}@{host}'])
+            
+            try:
+                # Ouvrir terminal SSH externe selon l'OS et l'environnement
+                if platform.system() == "Darwin":
+                    subprocess.Popen(['osascript', '-e', f'tell app "Terminal" to do script "ssh {user}@{host}"'])
+                elif platform.system() == "Windows":
+                    subprocess.Popen(['cmd', '/c', 'start', 'ssh', f'{user}@{host}'])
+                else:
+                    # Linux - essayer différents terminaux dans l'ordre de préférence
+                    terminals = [
+                        ['gnome-terminal', '--', 'ssh', f'{user}@{host}'],
+                        ['konsole', '-e', 'ssh', f'{user}@{host}'],
+                        ['xfce4-terminal', '-e', f'ssh {user}@{host}'],
+                        ['mate-terminal', '-e', f'ssh {user}@{host}'],
+                        ['terminator', '-e', f'ssh {user}@{host}'],
+                        ['x-terminal-emulator', '-e', f'ssh {user}@{host}'],
+                        ['xterm', '-e', f'ssh {user}@{host}']
+                    ]
+                    
+                    ssh_launched = False
+                    for terminal_cmd in terminals:
+                        try:
+                            subprocess.Popen(terminal_cmd)
+                            ssh_launched = True
+                            log(f"✅ SSH lancé avec {terminal_cmd[0]}")
+                            break
+                        except FileNotFoundError:
+                            continue
+                    
+                    if not ssh_launched:
+                        # Fallback: afficher la commande à copier-coller
+                        show_ssh_command(f"ssh {user}@{host}")
+                        
+            except Exception as e:
+                log(f"❌ Erreur lors du lancement SSH: {e}", level="ERROR")
+                show_ssh_command(f"ssh {user}@{host}")
     
     tk.Button(conn_frame, text="Connecter", command=connect_ssh, 
              bg=COLORS['success'], fg=COLORS['white']).grid(row=0, column=4, padx=10, pady=5)
+
+def show_ssh_command(ssh_cmd):
+    """Affiche la commande SSH à copier-coller quand aucun terminal n'est disponible"""
+    cmd_win = tk.Toplevel(root)
+    cmd_win.title("🔐 Commande SSH")
+    cmd_win.geometry("500x200")
+    cmd_win.configure(bg=COLORS['light'])
+    
+    tk.Label(cmd_win, text="Aucun terminal trouvé. Copiez cette commande:", 
+            font=("Arial", 12), bg=COLORS['light']).pack(pady=20)
+    
+    # Champ de texte avec la commande SSH
+    cmd_entry = tk.Entry(cmd_win, width=50, font=("Consolas", 11))
+    cmd_entry.pack(pady=10)
+    cmd_entry.insert(0, ssh_cmd)
+    cmd_entry.config(state='readonly')
+    
+    def copy_to_clipboard():
+        cmd_win.clipboard_clear()
+        cmd_win.clipboard_append(ssh_cmd)
+        copy_btn.config(text="✅ Copié!", bg=COLORS['success'])
+        cmd_win.after(2000, lambda: copy_btn.config(text="📋 Copier", bg=COLORS['info']))
+    
+    copy_btn = tk.Button(cmd_win, text="📋 Copier", command=copy_to_clipboard,
+                        bg=COLORS['info'], fg=COLORS['white'], padx=20)
+    copy_btn.pack(pady=10)
+    
+    tk.Label(cmd_win, text="Ouvrez ensuite un terminal et collez cette commande", 
+            font=("Arial", 10), fg=COLORS['secondary'], bg=COLORS['light']).pack(pady=10)
 
 def show_ip_calculator():
     """Calculateur IP/Subnets"""
