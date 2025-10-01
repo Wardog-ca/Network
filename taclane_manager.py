@@ -111,18 +111,55 @@ def create_taclane_interface(parent, colors, log_func):
     def check_network_config():
         """Vérifie la configuration réseau actuelle"""
         try:
-            result = subprocess.run(['ifconfig'], capture_output=True, text=True)
-            
-            # Chercher une interface dans le réseau 172.16.0.x
+            import platform
+            system = platform.system()
             taclane_interfaces = []
-            current_interface = None
             
-            for line in result.stdout.split('\n'):
-                if line and not line.startswith('\t') and ':' in line:
-                    current_interface = line.split(':')[0]
-                elif current_interface and 'inet 172.16.0.' in line:
-                    ip_addr = line.split('inet ')[1].split()[0]
-                    taclane_interfaces.append((current_interface, ip_addr))
+            if system == "Windows":
+                # Windows - utiliser ipconfig
+                result = subprocess.run(['ipconfig'], capture_output=True, text=True, shell=True)
+                
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if 'adapter' in line.lower() and line.endswith(':'):
+                        current_interface = line.replace(':', '').strip()
+                    elif current_interface and 'IPv4 Address' in line and '172.16.0.' in line:
+                        ip_parts = line.split(':')
+                        if len(ip_parts) >= 2:
+                            ip_addr = ip_parts[1].strip().replace('(Preferred)', '')
+                            taclane_interfaces.append((current_interface, ip_addr))
+                            
+            elif system == "Linux":
+                # Linux - utiliser ip addr
+                result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True)
+                
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if line and line[0].isdigit() and ':' in line:
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            current_interface = parts[1].strip()
+                    elif current_interface and 'inet 172.16.0.' in line:
+                        parts = line.split()
+                        for i, part in enumerate(parts):
+                            if part == 'inet' and i + 1 < len(parts):
+                                ip_addr = parts[i + 1].split('/')[0]
+                                taclane_interfaces.append((current_interface, ip_addr))
+                                break
+                                
+            else:  # macOS et autres Unix
+                # macOS - utiliser ifconfig
+                result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    if line and not line.startswith('\t') and ':' in line:
+                        current_interface = line.split(':')[0]
+                    elif current_interface and 'inet 172.16.0.' in line:
+                        ip_addr = line.split('inet ')[1].split()[0]
+                        taclane_interfaces.append((current_interface, ip_addr))
             
             net_win = tk.Toplevel(taclane_win)
             net_win.title("🌐 Configuration Réseau")
@@ -150,16 +187,48 @@ def create_taclane_interface(parent, colors, log_func):
             
             net_info += f"\n📋 Interfaces réseau détectées:\n"
             
-            # Lister toutes les interfaces
-            current_interface = None
-            for line in result.stdout.split('\n'):
-                if line and not line.startswith('\t') and ':' in line:
-                    current_interface = line.split(':')[0]
-                    status = "UP" if "UP" in line else "DOWN"
-                    net_info += f"  • {current_interface}: {status}\n"
-                elif current_interface and 'inet ' in line and 'inet 127.0.0.1' not in line:
-                    ip_addr = line.split('inet ')[1].split()[0]
-                    net_info += f"    └─ IP: {ip_addr}\n"
+            # Lister toutes les interfaces selon le système
+            if system == "Windows":
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if 'adapter' in line.lower() and line.endswith(':'):
+                        current_interface = line.replace(':', '').strip()
+                        net_info += f"  • {current_interface}\n"
+                    elif current_interface and 'IPv4 Address' in line:
+                        ip_parts = line.split(':')
+                        if len(ip_parts) >= 2:
+                            ip_addr = ip_parts[1].strip().replace('(Preferred)', '')
+                            net_info += f"    └─ IP: {ip_addr}\n"
+                            
+            elif system == "Linux":
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if line and line[0].isdigit() and ':' in line:
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            current_interface = parts[1].strip()
+                            status = "UP" if "UP" in line else "DOWN"
+                            net_info += f"  • {current_interface}: {status}\n"
+                    elif current_interface and 'inet ' in line and '127.0.0.1' not in line:
+                        parts = line.split()
+                        for i, part in enumerate(parts):
+                            if part == 'inet' and i + 1 < len(parts):
+                                ip_addr = parts[i + 1].split('/')[0]
+                                net_info += f"    └─ IP: {ip_addr}\n"
+                                break
+                                
+            else:  # macOS et autres Unix
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    if line and not line.startswith('\t') and ':' in line:
+                        current_interface = line.split(':')[0]
+                        status = "UP" if "UP" in line else "DOWN"
+                        net_info += f"  • {current_interface}: {status}\n"
+                    elif current_interface and 'inet ' in line and 'inet 127.0.0.1' not in line:
+                        ip_addr = line.split('inet ')[1].split()[0]
+                        net_info += f"    └─ IP: {ip_addr}\n"
             
             net_text.insert(tk.END, net_info)
             net_text.config(state='disabled')
@@ -329,17 +398,48 @@ def create_taclane_interface(parent, colors, log_func):
                 
                 # 1. Vérifier interfaces locales
                 validation_text.insert(tk.END, "1️⃣ Vérification interfaces locales...\n")
-                result = subprocess.run(['ifconfig'], capture_output=True, text=True)
                 
+                import platform
+                system = platform.system()
                 taclane_interfaces = []
-                current_interface = None
                 
-                for line in result.stdout.split('\n'):
-                    if line and not line.startswith('\t') and ':' in line:
-                        current_interface = line.split(':')[0]
-                    elif current_interface and 'inet 172.16.0.' in line:
-                        ip_addr = line.split('inet ')[1].split()[0]
-                        taclane_interfaces.append((current_interface, ip_addr))
+                if system == "Windows":
+                    result = subprocess.run(['ipconfig'], capture_output=True, text=True, shell=True)
+                    current_interface = None
+                    for line in result.stdout.split('\n'):
+                        line = line.strip()
+                        if 'adapter' in line.lower() and line.endswith(':'):
+                            current_interface = line.replace(':', '').strip()
+                        elif current_interface and 'IPv4 Address' in line and '172.16.0.' in line:
+                            ip_parts = line.split(':')
+                            if len(ip_parts) >= 2:
+                                ip_addr = ip_parts[1].strip().replace('(Preferred)', '')
+                                taclane_interfaces.append((current_interface, ip_addr))
+                elif system == "Linux":
+                    result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True)
+                    current_interface = None
+                    for line in result.stdout.split('\n'):
+                        line = line.strip()
+                        if line and line[0].isdigit() and ':' in line:
+                            parts = line.split(':')
+                            if len(parts) >= 2:
+                                current_interface = parts[1].strip()
+                        elif current_interface and 'inet 172.16.0.' in line:
+                            parts = line.split()
+                            for i, part in enumerate(parts):
+                                if part == 'inet' and i + 1 < len(parts):
+                                    ip_addr = parts[i + 1].split('/')[0]
+                                    taclane_interfaces.append((current_interface, ip_addr))
+                                    break
+                else:  # macOS
+                    result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                    current_interface = None
+                    for line in result.stdout.split('\n'):
+                        if line and not line.startswith('\t') and ':' in line:
+                            current_interface = line.split(':')[0]
+                        elif current_interface and 'inet 172.16.0.' in line:
+                            ip_addr = line.split('inet ')[1].split()[0]
+                            taclane_interfaces.append((current_interface, ip_addr))
                 
                 if taclane_interfaces:
                     validation_text.insert(tk.END, "   ✅ Interface(s) configurée(s):\n")
@@ -663,8 +763,19 @@ def create_taclane_interface(parent, colors, log_func):
         def check_and_configure_network():
             try:
                 # Vérifier si on a une interface dans le bon réseau
-                result = subprocess.run(['ifconfig'], capture_output=True, text=True)
-                has_taclane_network = '172.16.0.' in result.stdout
+                import platform
+                system = platform.system()
+                has_taclane_network = False
+                
+                if system == "Windows":
+                    result = subprocess.run(['ipconfig'], capture_output=True, text=True, shell=True)
+                    has_taclane_network = '172.16.0.' in result.stdout
+                elif system == "Linux":
+                    result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True)
+                    has_taclane_network = '172.16.0.' in result.stdout
+                else:  # macOS
+                    result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                    has_taclane_network = '172.16.0.' in result.stdout
                 
                 if not has_taclane_network:
                     # Demander confirmation pour configurer l'interface
