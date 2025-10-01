@@ -108,6 +108,195 @@ def create_taclane_interface(parent, colors, log_func):
     tk.Button(ip_frame, text="🔍 Tester", command=test_connection,
              bg=colors['info'], fg=colors['white'], padx=10).pack(side=tk.LEFT, padx=5)
     
+    def check_network_config():
+        """Vérifie la configuration réseau actuelle"""
+        try:
+            result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+            
+            # Chercher une interface dans le réseau 172.16.0.x
+            taclane_interfaces = []
+            current_interface = None
+            
+            for line in result.stdout.split('\n'):
+                if line and not line.startswith('\t') and ':' in line:
+                    current_interface = line.split(':')[0]
+                elif current_interface and 'inet 172.16.0.' in line:
+                    ip_addr = line.split('inet ')[1].split()[0]
+                    taclane_interfaces.append((current_interface, ip_addr))
+            
+            net_win = tk.Toplevel(taclane_win)
+            net_win.title("🌐 Configuration Réseau")
+            net_win.geometry("500x400")
+            
+            tk.Label(net_win, text="🌐 État de la Configuration Réseau", 
+                    font=("Arial", 14, "bold")).pack(pady=10)
+            
+            net_text = tk.Text(net_win, bg=colors['white'], font=("Consolas", 9))
+            net_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            net_info = "🔍 Vérification des interfaces réseau...\n\n"
+            
+            if taclane_interfaces:
+                net_info += "✅ Interface(s) configurée(s) pour Taclane:\n"
+                for interface, ip in taclane_interfaces:
+                    net_info += f"  • {interface}: {ip}\n"
+                net_info += "\n✅ Vous pouvez accéder au Taclane!\n"
+            else:
+                net_info += "❌ Aucune interface dans le réseau 172.16.0.0/24\n\n"
+                net_info += "⚠️  Configuration requise:\n"
+                net_info += "   • Votre interface doit avoir une IP comme 172.16.0.2\n"
+                net_info += "   • Ceci permet la communication avec le Taclane (172.16.0.1)\n\n"
+                net_info += "💡 Utilisez le bouton 'Config Auto' pour configurer automatiquement\n"
+            
+            net_info += f"\n📋 Interfaces réseau détectées:\n"
+            
+            # Lister toutes les interfaces
+            current_interface = None
+            for line in result.stdout.split('\n'):
+                if line and not line.startswith('\t') and ':' in line:
+                    current_interface = line.split(':')[0]
+                    status = "UP" if "UP" in line else "DOWN"
+                    net_info += f"  • {current_interface}: {status}\n"
+                elif current_interface and 'inet ' in line and 'inet 127.0.0.1' not in line:
+                    ip_addr = line.split('inet ')[1].split()[0]
+                    net_info += f"    └─ IP: {ip_addr}\n"
+            
+            net_text.insert(tk.END, net_info)
+            net_text.config(state='disabled')
+            
+            # Bouton pour configuration auto si nécessaire
+            if not taclane_interfaces:
+                def auto_config():
+                    net_win.destroy()
+                    show_network_config_help()
+                
+                tk.Button(net_win, text="🔧 Guide Configuration", 
+                         command=auto_config, bg=colors['warning'], 
+                         fg=colors['white'], padx=20, pady=5).pack(pady=10)
+            
+        except Exception as e:
+            log_func(f"❌ Erreur vérification réseau: {e}")
+    
+    def show_network_config_help():
+        """Affiche l'aide pour la configuration réseau"""
+        help_win = tk.Toplevel(taclane_win)
+        help_win.title("🔧 Guide Configuration Réseau")
+        help_win.geometry("700x500")
+        
+        tk.Label(help_win, text="🔧 Configuration Réseau pour Taclane", 
+                font=("Arial", 14, "bold")).pack(pady=10)
+        
+        help_text = tk.Text(help_win, bg=colors['white'], font=("Arial", 10), wrap=tk.WORD)
+        help_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        
+        config_help = """
+🎯 OBJECTIF: Configurer votre interface réseau pour communiquer avec le Taclane
+
+📍 Configuration requise:
+• Taclane: 172.16.0.1 (équipement cible)
+• Votre PC: 172.16.0.2 (adresse recommandée)
+• Masque: 255.255.255.0 (/24)
+
+══════════════════════════════════════════════════════════════════
+
+🍎 CONFIGURATION macOS:
+
+1️⃣ Méthode Terminal (Recommandée):
+   sudo ifconfig en0 alias 172.16.0.2 netmask 255.255.255.0
+   
+2️⃣ Méthode Graphique:
+   • Préférences Système → Réseau
+   • Sélectionner votre interface (Wi-Fi/Ethernet)
+   • Avancé → TCP/IP
+   • Configurer IPv4: Manuellement
+   • Adresse IP: 172.16.0.2
+   • Masque: 255.255.255.0
+
+══════════════════════════════════════════════════════════════════
+
+🐧 CONFIGURATION Linux:
+
+1️⃣ Méthode ip (Moderne):
+   sudo ip addr add 172.16.0.2/24 dev eth0
+   
+2️⃣ Méthode ifconfig (Classique):
+   sudo ifconfig eth0:1 172.16.0.2 netmask 255.255.255.0 up
+
+══════════════════════════════════════════════════════════════════
+
+🪟 CONFIGURATION Windows:
+
+1️⃣ Méthode PowerShell (Administrateur):
+   netsh interface ip add address "Ethernet" 172.16.0.2 255.255.255.0
+   
+2️⃣ Méthode Graphique:
+   • Panneau de configuration → Réseau et Internet
+   • Modifier les paramètres de la carte
+   • Clic droit sur votre interface → Propriétés
+   • IPv4 → Utiliser l'adresse IP suivante
+   • IP: 172.16.0.2, Masque: 255.255.255.0
+
+══════════════════════════════════════════════════════════════════
+
+✅ VÉRIFICATION après configuration:
+
+1️⃣ Test ping:
+   ping 172.16.0.1
+   
+2️⃣ Vérifier votre IP:
+   • macOS/Linux: ifconfig ou ip addr
+   • Windows: ipconfig
+   
+3️⃣ Test interface web:
+   • https://172.16.0.1
+   • http://172.16.0.1
+
+══════════════════════════════════════════════════════════════════
+
+⚠️ NOTES IMPORTANTES:
+
+• Cette configuration est souvent temporaire (perdue au redémarrage)
+• Sauvegardez votre config réseau actuelle avant modification
+• L'adresse 172.16.0.2 ne doit pas être utilisée par un autre équipement
+• Testez la connectivité avant d'accéder à l'interface web
+
+💡 Une fois configuré, utilisez le bouton "🌐 Interface Web" pour accéder au Taclane!
+        """
+        
+        help_text.insert(tk.END, config_help)
+        help_text.config(state='disabled')
+        
+        # Boutons d'action
+        btn_frame = tk.Frame(help_win)
+        btn_frame.pack(pady=10)
+        
+        def copy_macos_cmd():
+            help_win.clipboard_clear()
+            help_win.clipboard_append("sudo ifconfig en0 alias 172.16.0.2 netmask 255.255.255.0")
+            log_func("📋 Commande macOS copiée")
+        
+        def copy_linux_cmd():
+            help_win.clipboard_clear()
+            help_win.clipboard_append("sudo ip addr add 172.16.0.2/24 dev eth0")
+            log_func("📋 Commande Linux copiée")
+        
+        def copy_windows_cmd():
+            help_win.clipboard_clear()
+            help_win.clipboard_append('netsh interface ip add address "Ethernet" 172.16.0.2 255.255.255.0')
+            log_func("📋 Commande Windows copiée")
+        
+        tk.Button(btn_frame, text="📋 Copier macOS", command=copy_macos_cmd,
+                 bg='#007AFF', fg='white', padx=10).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(btn_frame, text="📋 Copier Linux", command=copy_linux_cmd,
+                 bg='#FF6B35', fg='white', padx=10).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(btn_frame, text="📋 Copier Windows", command=copy_windows_cmd,
+                 bg='#0078D4', fg='white', padx=10).pack(side=tk.LEFT, padx=5)
+    
+    tk.Button(ip_frame, text="🌐 Config Réseau", command=check_network_config,
+             bg=colors['warning'], fg=colors['white'], padx=10).pack(side=tk.LEFT, padx=5)
+    
     # Outils de diagnostic
     diagnostic_frame = tk.LabelFrame(taclane_win, text="🔍 Outils de Diagnostic", 
                                    bg=colors['light'], font=("Arial", 11, "bold"))
@@ -117,21 +306,134 @@ def create_taclane_interface(parent, colors, log_func):
     diag_grid = tk.Frame(diagnostic_frame, bg=colors['light'])
     diag_grid.pack(padx=10, pady=10)
     
+    def validate_network_config():
+        """Valide la configuration réseau complète"""
+        validation_win = tk.Toplevel(taclane_win)
+        validation_win.title("✅ Validation Réseau")
+        validation_win.geometry("600x400")
+        
+        tk.Label(validation_win, text="✅ Validation Configuration Réseau", 
+                font=("Arial", 14, "bold")).pack(pady=10)
+        
+        validation_text = tk.Text(validation_win, bg=colors['white'], 
+                                 font=("Consolas", 9))
+        validation_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        def run_validation():
+            validation_text.delete(1.0, tk.END)
+            validation_text.insert(tk.END, "🔍 Validation en cours...\n\n")
+            validation_text.update()
+            
+            try:
+                ip = ip_var.get()
+                
+                # 1. Vérifier interfaces locales
+                validation_text.insert(tk.END, "1️⃣ Vérification interfaces locales...\n")
+                result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                
+                taclane_interfaces = []
+                current_interface = None
+                
+                for line in result.stdout.split('\n'):
+                    if line and not line.startswith('\t') and ':' in line:
+                        current_interface = line.split(':')[0]
+                    elif current_interface and 'inet 172.16.0.' in line:
+                        ip_addr = line.split('inet ')[1].split()[0]
+                        taclane_interfaces.append((current_interface, ip_addr))
+                
+                if taclane_interfaces:
+                    validation_text.insert(tk.END, "   ✅ Interface(s) configurée(s):\n")
+                    for interface, local_ip in taclane_interfaces:
+                        validation_text.insert(tk.END, f"      • {interface}: {local_ip}\n")
+                        if local_ip == "172.16.0.2":
+                            validation_text.insert(tk.END, "      ✅ IP recommandée configurée!\n")
+                else:
+                    validation_text.insert(tk.END, "   ❌ Aucune interface dans le réseau 172.16.0.0/24\n")
+                    validation_text.insert(tk.END, "   💡 Configuration requise: 172.16.0.2\n")
+                
+                # 2. Test ping
+                validation_text.insert(tk.END, f"\n2️⃣ Test ping vers {ip}...\n")
+                ping_result = subprocess.run(['ping', '-c', '3', '-W', '2000', ip], 
+                                           capture_output=True, text=True, timeout=10)
+                
+                if ping_result.returncode == 0:
+                    validation_text.insert(tk.END, f"   ✅ {ip} accessible\n")
+                    # Extraire les stats
+                    for line in ping_result.stdout.split('\n'):
+                        if 'packets transmitted' in line:
+                            validation_text.insert(tk.END, f"   📊 {line.strip()}\n")
+                else:
+                    validation_text.insert(tk.END, f"   ❌ {ip} non accessible\n")
+                
+                # 3. Test ports
+                validation_text.insert(tk.END, f"\n3️⃣ Test des ports essentiels...\n")
+                essential_ports = {80: "HTTP", 443: "HTTPS", 22: "SSH"}
+                
+                for port, service in essential_ports.items():
+                    try:
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(2)
+                        result = sock.connect_ex((ip, port))
+                        
+                        if result == 0:
+                            validation_text.insert(tk.END, f"   ✅ Port {port} ({service}): OUVERT\n")
+                        else:
+                            validation_text.insert(tk.END, f"   🔴 Port {port} ({service}): FERMÉ\n")
+                        
+                        sock.close()
+                    except:
+                        validation_text.insert(tk.END, f"   ❓ Port {port} ({service}): ERREUR\n")
+                
+                # 4. Recommandations finales
+                validation_text.insert(tk.END, f"\n4️⃣ Recommandations:\n")
+                if taclane_interfaces and ping_result.returncode == 0:
+                    validation_text.insert(tk.END, "   🎉 Configuration validée! Vous pouvez:\n")
+                    validation_text.insert(tk.END, f"      • Accéder via navigateur: https://{ip}\n")
+                    validation_text.insert(tk.END, f"      • Utiliser les outils de diagnostic\n")
+                    validation_text.insert(tk.END, f"      • Lancer le monitoring continu\n")
+                else:
+                    validation_text.insert(tk.END, "   ⚠️ Configuration incomplète:\n")
+                    if not taclane_interfaces:
+                        validation_text.insert(tk.END, "      • Configurez votre interface réseau (172.16.0.2)\n")
+                    if ping_result.returncode != 0:
+                        validation_text.insert(tk.END, "      • Vérifiez que le Taclane est allumé et connecté\n")
+                
+            except Exception as e:
+                validation_text.insert(tk.END, f"\n❌ Erreur lors de la validation: {e}\n")
+        
+        # Lancer la validation automatiquement
+        validation_win.after(500, run_validation)
+        
+        # Bouton pour relancer
+        tk.Button(validation_win, text="🔄 Relancer Validation", 
+                 command=run_validation, bg=colors['success'], 
+                 fg=colors['white'], padx=20, pady=5).pack(pady=10)
+    
     diagnostic_tools = [
         ("🏓 Ping Continu", lambda: start_continuous_ping(ip_var.get())),
         ("📊 Traceroute", lambda: run_traceroute(ip_var.get())),
         ("🔌 Scan Ports", lambda: run_port_scan(ip_var.get())),
         ("📈 Monitoring", lambda: start_monitoring(ip_var.get())),
         ("🌐 Interface Web", lambda: open_web_interface(ip_var.get())),
-        ("📋 ARP Table", lambda: show_arp_info(ip_var.get()))
+        ("📋 ARP Table", lambda: show_arp_info(ip_var.get())),
+        ("✅ Valid. Réseau", lambda: validate_network_config()),
+        ("🔧 Guide Config", lambda: show_network_config_help())
     ]
     
     for i, (name, command) in enumerate(diagnostic_tools):
-        row, col = i // 3, i % 3
+        row, col = i // 4, i % 4  # 4 colonnes pour les 8 outils
+        
+        # Couleurs spéciales pour les nouveaux outils
+        btn_color = colors['info']
+        if "Valid. Réseau" in name:
+            btn_color = colors['success']
+        elif "Guide Config" in name:
+            btn_color = colors['warning']
+        
         btn = tk.Button(diag_grid, text=name, command=command,
-                       bg=colors['info'], fg=colors['white'], 
-                       width=15, pady=5, font=("Arial", 9))
-        btn.grid(row=row, column=col, padx=5, pady=5)
+                       bg=btn_color, fg=colors['white'], 
+                       width=12, pady=5, font=("Arial", 9))
+        btn.grid(row=row, column=col, padx=3, pady=5)
     
     # Informations système
     info_frame = tk.LabelFrame(taclane_win, text="📊 Informations Système", 
@@ -357,21 +659,301 @@ def create_taclane_interface(parent, colors, log_func):
         threading.Thread(target=monitor, daemon=True).start()
     
     def open_web_interface(ip):
-        """Ouvre l'interface web du Taclane"""
-        try:
-            # Essayer HTTPS d'abord, puis HTTP
-            urls = [f"https://{ip}", f"http://{ip}"]
-            
-            for url in urls:
-                try:
-                    webbrowser.open(url)
-                    log_func(f"🌐 Interface web ouverte: {url}")
-                    break
-                except:
-                    continue
+        """Ouvre l'interface web du Taclane avec vérification réseau"""
+        def check_and_configure_network():
+            try:
+                # Vérifier si on a une interface dans le bon réseau
+                result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                has_taclane_network = '172.16.0.' in result.stdout
+                
+                if not has_taclane_network:
+                    # Demander confirmation pour configurer l'interface
+                    config_net = tk.messagebox.askyesno(
+                        "Configuration réseau",
+                        f"Aucune interface trouvée dans le réseau 172.16.0.0/24.\n\n"
+                        f"Pour accéder au Taclane ({ip}), votre interface doit avoir\n"
+                        f"une adresse IP dans le même réseau (ex: 172.16.0.2).\n\n"
+                        f"Voulez-vous configurer automatiquement l'interface réseau?",
+                        icon='question'
+                    )
                     
-        except Exception as e:
-            log_func(f"❌ Erreur ouverture interface web: {e}")
+                    if config_net:
+                        configure_interface_for_taclane()
+                    else:
+                        show_manual_config_instructions()
+                        return
+                
+                # Continuer avec l'ouverture de l'interface web
+                open_web_browser(ip)
+                
+            except Exception as e:
+                log_func(f"❌ Erreur vérification réseau: {e}")
+                open_web_browser(ip)  # Essayer quand même
+        
+        def configure_interface_for_taclane():
+            """Configure automatiquement une interface pour le réseau Taclane"""
+            try:
+                import platform
+                system = platform.system()
+                
+                if system == "Darwin":  # macOS
+                    # Trouver une interface disponible
+                    result = subprocess.run(['route', 'get', 'default'], 
+                                          capture_output=True, text=True)
+                    
+                    # Extraire l'interface par défaut
+                    default_interface = None
+                    for line in result.stdout.split('\n'):
+                        if 'interface:' in line:
+                            default_interface = line.split(':')[1].strip()
+                            break
+                    
+                    if default_interface:
+                        # Configurer un alias sur l'interface par défaut
+                        cmd = f"sudo ifconfig {default_interface} alias 172.16.0.2 netmask 255.255.255.0"
+                        
+                        config_win = tk.Toplevel(taclane_win)
+                        config_win.title("🔧 Configuration réseau")
+                        config_win.geometry("600x400")
+                        
+                        tk.Label(config_win, text="🔧 Configuration de l'interface réseau", 
+                                font=("Arial", 14, "bold")).pack(pady=10)
+                        
+                        tk.Label(config_win, text=f"Interface détectée: {default_interface}", 
+                                font=("Arial", 11)).pack(pady=5)
+                        
+                        tk.Label(config_win, text="Commande à exécuter:", 
+                                font=("Arial", 11, "bold")).pack(pady=(10,5))
+                        
+                        cmd_text = tk.Text(config_win, height=3, bg='#f0f0f0', 
+                                         font=("Consolas", 10))
+                        cmd_text.pack(padx=20, pady=5, fill=tk.X)
+                        cmd_text.insert(tk.END, cmd)
+                        cmd_text.config(state='disabled')
+                        
+                        instructions = """
+🔧 Instructions:
+1. Ouvrez un terminal
+2. Copiez et exécutez la commande ci-dessus
+3. Entrez votre mot de passe administrateur si demandé
+4. L'interface aura l'adresse 172.16.0.2
+5. Vous pourrez alors accéder au Taclane sur 172.16.0.1
+
+⚠️ Cette configuration est temporaire et sera perdue au redémarrage.
+                        """
+                        
+                        info_text = tk.Text(config_win, height=8, bg='white', 
+                                          font=("Arial", 10), wrap=tk.WORD)
+                        info_text.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+                        info_text.insert(tk.END, instructions)
+                        info_text.config(state='disabled')
+                        
+                        def copy_command():
+                            config_win.clipboard_clear()
+                            config_win.clipboard_append(cmd)
+                            log_func("📋 Commande copiée dans le presse-papier")
+                        
+                        tk.Button(config_win, text="📋 Copier la commande", 
+                                 command=copy_command, bg=colors['info'], 
+                                 fg=colors['white'], padx=20, pady=5).pack(pady=10)
+                
+                elif system == "Linux":
+                    # Configuration Linux
+                    show_linux_config_instructions()
+                    
+                elif system == "Windows":
+                    # Configuration Windows
+                    show_windows_config_instructions()
+                    
+            except Exception as e:
+                log_func(f"❌ Erreur configuration interface: {e}")
+                show_manual_config_instructions()
+        
+        def show_manual_config_instructions():
+            """Affiche les instructions de configuration manuelle"""
+            manual_win = tk.Toplevel(taclane_win)
+            manual_win.title("📖 Configuration manuelle")
+            manual_win.geometry("700x500")
+            
+            tk.Label(manual_win, text="📖 Configuration manuelle de l'interface réseau", 
+                    font=("Arial", 14, "bold")).pack(pady=10)
+            
+            instructions_text = tk.Text(manual_win, bg='white', font=("Arial", 10), 
+                                      wrap=tk.WORD)
+            instructions_text.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+            
+            manual_instructions = """
+🔧 Configuration manuelle par système d'exploitation:
+
+═══════════════════════════════════════════════════════════════
+
+🍎 macOS:
+1. Ouvrez un terminal
+2. Exécutez: sudo ifconfig en0 alias 172.16.0.2 netmask 255.255.255.0
+   (remplacez 'en0' par votre interface réseau principale)
+3. Vérifiez: ifconfig en0
+
+🐧 Linux:
+1. Ouvrez un terminal  
+2. Exécutez: sudo ip addr add 172.16.0.2/24 dev eth0
+   (remplacez 'eth0' par votre interface réseau)
+3. Vérifiez: ip addr show eth0
+
+🪟 Windows:
+1. Ouvrez une invite de commande en tant qu'administrateur
+2. Exécutez: netsh interface ip add address "Ethernet" 172.16.0.2 255.255.255.0
+   (remplacez "Ethernet" par le nom de votre interface)
+3. Vérifiez: ipconfig
+
+═══════════════════════════════════════════════════════════════
+
+💡 Alternative - Configuration graphique:
+
+🍎 macOS (Préférences Système):
+• Aller dans Préférences Système > Réseau
+• Sélectionner votre interface réseau
+• Cliquer sur "Avancé..." > TCP/IP
+• Ajouter une configuration manuelle avec 172.16.0.2
+
+🐧 Linux (NetworkManager):
+• Clic droit sur l'icône réseau
+• Modifier les connexions
+• Ajouter une nouvelle configuration avec IP 172.16.0.2/24
+
+🪟 Windows (Panneau de configuration):
+• Panneau de configuration > Réseau et Internet
+• Modifier les paramètres de la carte
+• Propriétés > IPv4 > Utiliser l'adresse IP suivante
+• IP: 172.16.0.2, Masque: 255.255.255.0
+
+═══════════════════════════════════════════════════════════════
+
+⚠️ Important:
+• Cette configuration permet la communication avec le Taclane
+• L'adresse 172.16.0.2 ne doit pas être utilisée par un autre équipement
+• Sauvegardez votre configuration réseau actuelle avant modification
+• Cette configuration peut être temporaire selon vos besoins
+
+🔗 Une fois configuré, vous pourrez accéder au Taclane via:
+• https://172.16.0.1 (HTTPS recommandé)
+• http://172.16.0.1 (HTTP)
+            """
+            
+            instructions_text.insert(tk.END, manual_instructions)
+            instructions_text.config(state='disabled')
+        
+        def show_linux_config_instructions():
+            """Instructions spécifiques Linux"""
+            linux_win = tk.Toplevel(taclane_win)
+            linux_win.title("🐧 Configuration Linux")
+            linux_win.geometry("600x400")
+            
+            tk.Label(linux_win, text="🐧 Configuration Linux", 
+                    font=("Arial", 14, "bold")).pack(pady=10)
+            
+            # Détecter l'interface principale
+            try:
+                result = subprocess.run(['ip', 'route', 'show', 'default'], 
+                                      capture_output=True, text=True)
+                default_interface = "eth0"  # Fallback
+                
+                for line in result.stdout.split('\n'):
+                    if 'dev' in line:
+                        parts = line.split()
+                        dev_index = parts.index('dev')
+                        if dev_index + 1 < len(parts):
+                            default_interface = parts[dev_index + 1]
+                            break
+                
+                cmd = f"sudo ip addr add 172.16.0.2/24 dev {default_interface}"
+                
+                tk.Label(linux_win, text=f"Interface détectée: {default_interface}", 
+                        font=("Arial", 11)).pack(pady=5)
+                
+                tk.Label(linux_win, text="Commande recommandée:", 
+                        font=("Arial", 11, "bold")).pack(pady=(10,5))
+                
+                cmd_text = tk.Text(linux_win, height=2, bg='#f0f0f0', 
+                                 font=("Consolas", 10))
+                cmd_text.pack(padx=20, pady=5, fill=tk.X)
+                cmd_text.insert(tk.END, cmd)
+                cmd_text.config(state='disabled')
+                
+                def copy_linux_cmd():
+                    linux_win.clipboard_clear()
+                    linux_win.clipboard_append(cmd)
+                    log_func("📋 Commande Linux copiée")
+                
+                tk.Button(linux_win, text="📋 Copier", command=copy_linux_cmd,
+                         bg=colors['info'], fg=colors['white']).pack(pady=10)
+                
+            except Exception as e:
+                log_func(f"❌ Erreur détection interface Linux: {e}")
+        
+        def show_windows_config_instructions():
+            """Instructions spécifiques Windows"""
+            windows_win = tk.Toplevel(taclane_win)
+            windows_win.title("🪟 Configuration Windows")
+            windows_win.geometry("600x400")
+            
+            tk.Label(windows_win, text="🪟 Configuration Windows", 
+                    font=("Arial", 14, "bold")).pack(pady=10)
+            
+            cmd = 'netsh interface ip add address "Ethernet" 172.16.0.2 255.255.255.0'
+            
+            tk.Label(windows_win, text="Commande PowerShell (Administrateur):", 
+                    font=("Arial", 11, "bold")).pack(pady=(10,5))
+            
+            cmd_text = tk.Text(windows_win, height=2, bg='#f0f0f0', 
+                             font=("Consolas", 10))
+            cmd_text.pack(padx=20, pady=5, fill=tk.X)
+            cmd_text.insert(tk.END, cmd)
+            cmd_text.config(state='disabled')
+            
+            def copy_windows_cmd():
+                windows_win.clipboard_clear()
+                windows_win.clipboard_append(cmd)
+                log_func("📋 Commande Windows copiée")
+            
+            tk.Button(windows_win, text="📋 Copier", command=copy_windows_cmd,
+                     bg=colors['info'], fg=colors['white']).pack(pady=10)
+        
+        def open_web_browser(ip):
+            """Ouvre le navigateur vers l'interface Taclane"""
+            try:
+                import webbrowser
+                
+                # Test de connectivité d'abord
+                test_result = subprocess.run(['ping', '-c', '1', '-W', '2000', ip], 
+                                           capture_output=True)
+                
+                if test_result.returncode != 0:
+                    tk.messagebox.showwarning(
+                        "Connectivité",
+                        f"⚠️ Le Taclane ({ip}) ne répond pas au ping.\n\n"
+                        f"Vérifiez que:\n"
+                        f"• L'équipement est allumé\n"
+                        f"• Votre interface réseau est configurée (172.16.0.2)\n"
+                        f"• Le câble réseau est connecté"
+                    )
+                
+                # Essayer HTTPS d'abord, puis HTTP
+                urls = [f"https://{ip}", f"http://{ip}"]
+                
+                for url in urls:
+                    try:
+                        webbrowser.open(url)
+                        log_func(f"🌐 Interface web ouverte: {url}")
+                        log_func("💡 Assurez-vous que votre interface a l'IP 172.16.0.2")
+                        break
+                    except:
+                        continue
+                        
+            except Exception as e:
+                log_func(f"❌ Erreur ouverture interface web: {e}")
+        
+        # Lancer la vérification et configuration
+        threading.Thread(target=check_and_configure_network, daemon=True).start()
     
     def show_arp_info(ip):
         """Affiche les informations ARP"""

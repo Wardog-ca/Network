@@ -43,9 +43,11 @@ Le **Gestionnaire Taclane** est un outil spécialisé pour la gestion et le diag
 - Alertes en cas de problème
 
 #### 🌐 Interface Web
-- Ouverture automatique de l'interface web
-- Support HTTPS/HTTP
-- Accès direct aux paramètres de l'équipement
+- **Vérification automatique** de la configuration réseau
+- **Configuration assistée** si votre PC n'a pas la bonne IP
+- **Ouverture automatique** de l'interface web (HTTPS/HTTP)
+- **Test de connectivité** avant ouverture du navigateur
+- **Instructions détaillées** pour chaque système d'exploitation
 
 #### 📋 Informations ARP
 - Consultation de la table ARP
@@ -83,13 +85,19 @@ Le **Gestionnaire Taclane** est un outil spécialisé pour la gestion et le diag
 
 ### Configuration initiale
 
-1. **Vérifier l'adresse IP**:
-   - Par défaut: `172.16.0.1`
-   - Modifiable selon votre configuration réseau
+1. **Configuration réseau OBLIGATOIRE**:
+   - Cliquez sur "🌐 Config Réseau" pour vérifier votre configuration
+   - **Votre PC doit avoir l'IP 172.16.0.2** pour communiquer avec le Taclane
+   - Le Taclane utilise par défaut l'IP `172.16.0.1`
 
-2. **Test de connectivité**:
+2. **Configuration automatique**:
+   - L'outil détecte automatiquement si votre réseau est configuré
+   - Si non configuré, il propose des instructions détaillées
+   - Commandes prêtes à copier pour macOS, Linux et Windows
+
+3. **Test de connectivité**:
    - Cliquez sur "🔍 Tester" pour vérifier la connexion
-   - Le statut s'affiche en temps réel
+   - Le statut s'affiche en temps réel avec codes couleur
 
 ### Diagnostic avancé
 
@@ -111,6 +119,36 @@ Le **Gestionnaire Taclane** est un outil spécialisé pour la gestion et le diag
 - **Segment réseau**: 172.16.0.0/24
 - **Masque de sous-réseau**: 255.255.255.0
 - **Passerelle probable**: 172.16.0.254
+- **🎯 CRITIQUE**: Votre PC doit avoir l'IP **172.16.0.2** pour communiquer
+
+### 🌐 Configuration réseau requise
+
+#### Configuration rapide par système:
+
+**🍎 macOS:**
+```bash
+sudo ifconfig en0 alias 172.16.0.2 netmask 255.255.255.0
+```
+
+**🐧 Linux:**
+```bash
+sudo ip addr add 172.16.0.2/24 dev eth0
+```
+
+**🪟 Windows (PowerShell Administrateur):**
+```cmd
+netsh interface ip add address "Ethernet" 172.16.0.2 255.255.255.0
+```
+
+#### Vérification après configuration:
+```bash
+# Test de connectivité
+ping 172.16.0.1
+
+# Vérification de votre IP
+ifconfig  # macOS/Linux
+ipconfig  # Windows
+```
 
 ### Ports de service
 - **80/443**: Interface web d'administration
