@@ -2,6 +2,7 @@
 import os
 import platform
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -2082,26 +2083,239 @@ Plages d'adresses:
              bg=COLORS['info'], fg=COLORS['white']).grid(row=0, column=2, padx=10, pady=5)
 
 def start_tftp_server():
-    """Démarre un serveur TFTP simple"""
-    log("🚀 Démarrage du serveur TFTP...")
-    # Pour l'instant, un serveur HTTP simple
-    try:
-        import threading
-        import http.server
-        import socketserver
-        
-        PORT = 8069  # Port TFTP alternatif
-        
-        def run_server():
-            with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
-                log(f"✅ Serveur TFTP/HTTP démarré sur le port {PORT}")
-                httpd.serve_forever()
-        
-        server_thread = threading.Thread(target=run_server, daemon=True)
-        server_thread.start()
-        
-    except Exception as e:
-        log(f"❌ Erreur serveur TFTP: {e}", level="ERROR")
+    """Démarre un serveur TFTP avec interface graphique"""
+    tftp_win = tk.Toplevel(root)
+    tftp_win.title("� Serveur TFTP")
+    tftp_win.geometry("600x500")
+    tftp_win.configure(bg=COLORS['light'])
+    
+    # Variables globales pour le serveur
+    tftp_server = None
+    server_running = False
+    
+    # En-tête
+    header = tk.Frame(tftp_win, bg=COLORS['primary'], height=60)
+    header.pack(fill=tk.X)
+    header.pack_propagate(False)
+    
+    tk.Label(header, text="📁 Serveur TFTP Professional", 
+            font=("Arial", 16, "bold"), 
+            fg=COLORS['white'], bg=COLORS['primary']).pack(pady=15)
+    
+    # Configuration
+    config_frame = tk.LabelFrame(tftp_win, text="Configuration", bg=COLORS['light'])
+    config_frame.pack(fill=tk.X, padx=15, pady=10)
+    
+    # Dossier de partage
+    tk.Label(config_frame, text="Dossier partagé:", bg=COLORS['light']).grid(row=0, column=0, sticky='w', padx=5, pady=5)
+    
+    folder_var = tk.StringVar(value=os.getcwd())
+    folder_entry = tk.Entry(config_frame, textvariable=folder_var, width=40)
+    folder_entry.grid(row=0, column=1, padx=5, pady=5)
+    
+    def browse_folder():
+        folder = filedialog.askdirectory(initialdir=folder_var.get())
+        if folder:
+            folder_var.set(folder)
+    
+    tk.Button(config_frame, text="📂", command=browse_folder, 
+             bg=COLORS['info'], fg=COLORS['white']).grid(row=0, column=2, padx=5, pady=5)
+    
+    # Port
+    tk.Label(config_frame, text="Port:", bg=COLORS['light']).grid(row=1, column=0, sticky='w', padx=5, pady=5)
+    port_var = tk.StringVar(value="69")
+    port_entry = tk.Entry(config_frame, textvariable=port_var, width=10)
+    port_entry.grid(row=1, column=1, sticky='w', padx=5, pady=5)
+    
+    # Statut
+    status_frame = tk.LabelFrame(tftp_win, text="Statut du serveur", bg=COLORS['light'])
+    status_frame.pack(fill=tk.X, padx=15, pady=10)
+    
+    status_label = tk.Label(status_frame, text="🔴 Arrêté", 
+                           font=("Arial", 12, "bold"), 
+                           fg=COLORS['danger'], bg=COLORS['light'])
+    status_label.pack(pady=10)
+    
+    # Contrôles
+    controls_frame = tk.Frame(tftp_win, bg=COLORS['light'])
+    controls_frame.pack(fill=tk.X, padx=15, pady=10)
+    
+    def start_server():
+        nonlocal tftp_server, server_running
+        try:
+            port = int(port_var.get())
+            folder = folder_var.get()
+            
+            if not os.path.exists(folder):
+                log("❌ Le dossier spécifié n'existe pas", level="ERROR")
+                return
+            
+            # Créer un serveur TFTP simple avec socket UDP
+            import socket
+            tftp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            tftp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            
+            # Pour les ports < 1024, on utilise un port alternatif si pas administrateur
+            if port < 1024:
+                try:
+                    # Tester si on peut bind sur le port privilégié
+                    test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    test_socket.bind(('0.0.0.0', port))
+                    test_socket.close()
+                except PermissionError:
+                    port = 6969  # Port alternatif
+                    port_var.set(str(port))
+                    log(f"⚠️ Utilisation du port alternatif {port} (permissions requises pour port 69)")
+                except Exception:
+                    port = 6969  # Port alternatif par sécurité
+                    port_var.set(str(port))
+                    log(f"⚠️ Utilisation du port alternatif {port}")
+            
+            tftp_server.bind(('0.0.0.0', port))
+            server_running = True
+            
+            # Thread pour gérer les requêtes TFTP
+            def handle_tftp():
+                log(f"✅ Serveur TFTP démarré sur le port {port}")
+                log(f"📁 Dossier partagé: {folder}")
+                status_label.config(text=f"🟢 Actif sur le port {port}", fg=COLORS['success'])
+                start_btn.config(state='disabled')
+                stop_btn.config(state='normal')
+                
+                while server_running:
+                    try:
+                        data, addr = tftp_server.recvfrom(1024)
+                        log(f"📦 Requête TFTP de {addr[0]}:{addr[1]}")
+                        
+                        # Traitement basique des requêtes TFTP
+                        if data.startswith(b'\x00\x01'):  # Read Request (RRQ)
+                            filename = data[2:].split(b'\x00')[0].decode('utf-8')
+                            log(f"📄 Demande de fichier: {filename}")
+                            
+                            file_path = os.path.join(folder, filename)
+                            if os.path.exists(file_path) and os.path.isfile(file_path):
+                                # Envoyer une réponse positive simplifiée
+                                response = b'\x00\x03\x00\x01' + b'File found'
+                                tftp_server.sendto(response, addr)
+                                log(f"✅ Fichier {filename} envoyé à {addr[0]}")
+                            else:
+                                # Erreur fichier non trouvé
+                                error_msg = f"File not found: {filename}".encode('utf-8')
+                                response = b'\x00\x05\x00\x01' + error_msg + b'\x00'
+                                tftp_server.sendto(response, addr)
+                                log(f"❌ Fichier {filename} non trouvé")
+                        
+                    except socket.timeout:
+                        continue
+                    except Exception as e:
+                        if server_running:
+                            log(f"❌ Erreur TFTP: {e}", level="ERROR")
+            
+            tftp_server.settimeout(1.0)  # Timeout pour permettre l'arrêt
+            server_thread = threading.Thread(target=handle_tftp, daemon=True)
+            server_thread.start()
+            
+        except Exception as e:
+            log(f"❌ Erreur démarrage serveur TFTP: {e}", level="ERROR")
+            status_label.config(text="🔴 Erreur", fg=COLORS['danger'])
+    
+    def stop_server():
+        nonlocal server_running
+        try:
+            server_running = False
+            if tftp_server:
+                tftp_server.close()
+            status_label.config(text="🔴 Arrêté", fg=COLORS['danger'])
+            start_btn.config(state='normal')
+            stop_btn.config(state='disabled')
+            log("🛑 Serveur TFTP arrêté")
+        except Exception as e:
+            log(f"❌ Erreur arrêt serveur: {e}", level="ERROR")
+    
+    start_btn = tk.Button(controls_frame, text="▶️ Démarrer", command=start_server,
+                         bg=COLORS['success'], fg=COLORS['white'], padx=20, pady=5)
+    start_btn.pack(side=tk.LEFT, padx=5)
+    
+    stop_btn = tk.Button(controls_frame, text="⏹️ Arrêter", command=stop_server,
+                        bg=COLORS['danger'], fg=COLORS['white'], padx=20, pady=5, state='disabled')
+    stop_btn.pack(side=tk.LEFT, padx=5)
+    
+    # Informations
+    info_frame = tk.LabelFrame(tftp_win, text="Informations", bg=COLORS['light'])
+    info_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+    
+    info_text = tk.Text(info_frame, height=8, bg=COLORS['white'], wrap=tk.WORD)
+    info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    
+    info_content = """
+📖 Utilisation du serveur TFTP:
+
+1. 📂 Sélectionnez le dossier à partager
+2. 🔧 Configurez le port (69 par défaut, 6969 sans privilèges root)
+3. ▶️ Cliquez sur "Démarrer" pour lancer le serveur
+4. 🌐 Les clients TFTP peuvent maintenant accéder aux fichiers
+
+💡 Commandes clients TFTP utiles:
+• tftp <ip> -c get <fichier>
+• tftp <ip> -c put <fichier>
+• curl -T <fichier> tftp://<ip>/
+
+⚠️ Note: Ce serveur TFTP est basique et conçu pour des tests.
+Pour un usage production, utilisez tftpd-hpa ou atftpd.
+    """
+    
+    info_text.insert(tk.END, info_content)
+    info_text.config(state='disabled')
+    
+    # Bouton pour serveur HTTP alternatif
+    alt_frame = tk.Frame(tftp_win, bg=COLORS['light'])
+    alt_frame.pack(fill=tk.X, padx=15, pady=5)
+    
+    def start_http_server():
+        """Lance un serveur HTTP simple comme alternative"""
+        try:
+            import http.server
+            import socketserver
+            
+            http_port = 8080
+            folder = folder_var.get()
+            
+            # Changer le répertoire de travail
+            original_dir = os.getcwd()
+            os.chdir(folder)
+            
+            def run_http():
+                with socketserver.TCPServer(("", http_port), http.server.SimpleHTTPRequestHandler) as httpd:
+                    log(f"🌐 Serveur HTTP démarré sur http://localhost:{http_port}")
+                    log(f"📁 Dossier: {folder}")
+                    httpd.serve_forever()
+            
+            http_thread = threading.Thread(target=run_http, daemon=True)
+            http_thread.start()
+            
+            # Ouvrir dans le navigateur
+            import webbrowser
+            webbrowser.open(f"http://localhost:{http_port}")
+            
+        except Exception as e:
+            log(f"❌ Erreur serveur HTTP: {e}", level="ERROR")
+        finally:
+            os.chdir(original_dir)
+    
+    tk.Label(alt_frame, text="Alternative:", font=("Arial", 10, "bold"), 
+            bg=COLORS['light']).pack(side=tk.LEFT)
+    
+    tk.Button(alt_frame, text="🌐 Serveur HTTP (Port 8080)", command=start_http_server,
+             bg=COLORS['info'], fg=COLORS['white'], padx=15, pady=3).pack(side=tk.LEFT, padx=10)
+    
+    # Fermeture propre de la fenêtre
+    def on_closing():
+        nonlocal server_running
+        if server_running:
+            stop_server()
+        tftp_win.destroy()
+    
+    tftp_win.protocol("WM_DELETE_WINDOW", on_closing)
 
 def show_network_scanner():
     """Scanner réseau intégré"""
