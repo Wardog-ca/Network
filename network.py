@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
 from pathlib import Path
 import logging
+import webbrowser
 
 SYNC_FOLDER = "Network Team"
 
@@ -1635,21 +1636,21 @@ def create_professional_tools():
             'name': 'TFTP Server',
             'icon': '📁',
             'description': 'Serveur TFTP pour transferts',
-            'command': ['python3', '-m', 'http.server', '69'],  # Sera remplacé par un vrai serveur TFTP
+            'command': 'builtin_tftp',
             'color': COLORS['success']
         },
         {
-            'name': 'Rufus',
-            'icon': '💾',
-            'description': 'Création de clés USB bootables',
-            'command': ['rufus'] if platform.system() == 'Windows' else ['balenaetcher'],
-            'color': COLORS['warning']
+            'name': 'Taclane Manager',
+            'icon': '�️',
+            'description': 'Gestionnaire équipements Taclane (172.16.0.1)',
+            'command': 'builtin_taclane',
+            'color': '#8e44ad'  # Violet pour sécurité
         },
         {
             'name': 'Network Scanner',
             'icon': '🔍',
             'description': 'Scanner réseau (nmap)',
-            'command': ['nmap', '-sn'],  # Scan ping
+            'command': 'builtin_scanner',
             'color': COLORS['secondary']
         },
         {
@@ -1665,6 +1666,13 @@ def create_professional_tools():
             'description': 'Calculateur IP/Subnets',
             'command': 'builtin_ipcalc',
             'color': COLORS['info']
+        },
+        {
+            'name': 'Rufus Tools',
+            'icon': '💾',
+            'description': 'Outils de création USB/ISO',
+            'command': 'builtin_rufus',
+            'color': COLORS['warning']
         }
     ]
     
@@ -1721,6 +1729,14 @@ def launch_professional_tool(tool):
             show_ssh_client()
         elif tool['command'] == 'builtin_ipcalc':
             show_ip_calculator()
+        elif tool['command'] == 'builtin_taclane':
+            start_taclane_manager()
+        elif tool['command'] == 'builtin_tftp':
+            start_tftp_server()
+        elif tool['command'] == 'builtin_scanner':
+            show_network_scanner()
+        elif tool['command'] == 'builtin_rufus':
+            show_rufus_tools()
         elif isinstance(tool['command'], list):
             if tool['name'] == 'TFTP Server':
                 start_tftp_server()
@@ -2081,6 +2097,96 @@ Plages d'adresses:
     
     tk.Button(input_frame, text="Calculer", command=calculate_subnet,
              bg=COLORS['info'], fg=COLORS['white']).grid(row=0, column=2, padx=10, pady=5)
+
+def start_taclane_manager():
+    """Lance le gestionnaire Taclane"""
+    try:
+        from taclane_manager import create_taclane_interface
+        create_taclane_interface(root, COLORS, log)
+        log("🛡️ Gestionnaire Taclane ouvert")
+    except ImportError:
+        log("❌ Module taclane_manager non trouvé", level="ERROR")
+        messagebox.showerror("Erreur", "Module Taclane non disponible")
+    except Exception as e:
+        log(f"❌ Erreur Taclane: {e}", level="ERROR")
+
+def show_rufus_tools():
+    """Affiche les outils de création USB/ISO"""
+    rufus_win = tk.Toplevel(root)
+    rufus_win.title("💾 Outils USB/ISO")
+    rufus_win.geometry("600x500")
+    rufus_win.configure(bg=COLORS['light'])
+    
+    # En-tête
+    header = tk.Frame(rufus_win, bg=COLORS['warning'], height=60)
+    header.pack(fill=tk.X)
+    header.pack_propagate(False)
+    
+    tk.Label(header, text="💾 Outils USB/ISO", 
+            font=("Arial", 16, "bold"), 
+            fg=COLORS['white'], bg=COLORS['warning']).pack(pady=15)
+    
+    # Outils disponibles
+    tools_frame = tk.LabelFrame(rufus_win, text="Outils disponibles", bg=COLORS['light'])
+    tools_frame.pack(fill=tk.X, padx=15, pady=10)
+    
+    usb_tools = [
+        ("Rufus (Windows)", "Créateur d'USB bootable", "rufus"),
+        ("Balena Etcher", "Flasher d'images cross-platform", "balenaetcher"),
+        ("dd command", "Outil ligne de commande Unix", "dd"),
+        ("UNetbootin", "Créateur Linux live USB", "unetbootin")
+    ]
+    
+    for i, (name, desc, cmd) in enumerate(usb_tools):
+        frame = tk.Frame(tools_frame, bg=COLORS['light'])
+        frame.pack(fill=tk.X, padx=5, pady=3)
+        
+        tk.Label(frame, text=f"💾 {name}", font=("Arial", 11, "bold"), 
+                bg=COLORS['light']).pack(side=tk.LEFT)
+        tk.Label(frame, text=desc, bg=COLORS['light']).pack(side=tk.LEFT, padx=10)
+        
+        def launch_tool(command=cmd):
+            try:
+                if platform.system() == "Windows":
+                    subprocess.Popen([command])
+                else:
+                    subprocess.Popen([command])
+                log(f"✅ {command} lancé")
+            except:
+                log(f"❌ {command} non trouvé")
+                webbrowser.open(f"https://www.google.com/search?q=download+{command}")
+        
+        tk.Button(frame, text="🚀", command=lambda c=cmd: launch_tool(c),
+                 bg=COLORS['info'], fg=COLORS['white']).pack(side=tk.RIGHT, padx=5)
+    
+    # Instructions
+    info_frame = tk.LabelFrame(rufus_win, text="Instructions", bg=COLORS['light'])
+    info_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+    
+    instructions = """💾 Création d'USB bootable:
+
+1. 📥 Téléchargez l'image ISO désirée
+2. 💾 Insérez une clé USB (minimum 4GB recommandé)
+3. 🚀 Lancez l'outil de votre choix
+4. 📂 Sélectionnez l'image ISO
+5. 💾 Sélectionnez la clé USB cible
+6. ⚡ Démarrez le processus de flash
+
+⚠️ ATTENTION: Le processus effacera toutes les données de la clé USB!
+
+🔧 Ligne de commande dd (Linux/macOS):
+sudo dd if=image.iso of=/dev/sdX bs=4M status=progress
+
+💡 Images utiles:
+• Ubuntu: https://ubuntu.com/download
+• Windows: https://www.microsoft.com/software-download
+• Kali Linux: https://www.kali.org/get-kali/
+• Memtest86: https://www.memtest86.com/"""
+    
+    info_text = tk.Text(info_frame, bg=COLORS['white'], wrap=tk.WORD, font=("Arial", 9))
+    info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    info_text.insert(tk.END, instructions)
+    info_text.config(state='disabled')
 
 def start_tftp_server():
     """Démarre un serveur TFTP avec interface graphique"""
